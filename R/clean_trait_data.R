@@ -7,7 +7,7 @@ library(dataDownloader)
 
 # Download leaf scan data
 get_file(node = "f4v9t",
-         file = "2023.09.27_LeafScanData_Raw.csv",
+         file = "LeafScanData_Raw.csv",
          path = "raw_data",
          remote_path = "Vegetation/raw_data/Leaf scans")
 
@@ -24,7 +24,7 @@ get_file(node = "f4v9t",
          remote_path = "Vegetation/raw_data/Trait data")
 
 # Manually clean errors from leaf area scanning datasheet ----
-durin.area <- read.csv("raw_data/2023.09.27_LeafScanData_Raw.csv") |>
+durin.area <- read.csv("raw_data/LeafScanData_Raw.csv") |>
   # Rename columns to match main dataset
   rename(envelope_ID = ID, bulk_nr_leaves_scanned = n) |>
   # Choose edited and found over original
