@@ -1,26 +1,108 @@
 ---
-title: "Data_process_test"
+title: "Data_test"
 format: html
 editor: visual
+author : Mathéo TOURIERE
+date : Today
 ---
 
-## Quarto
+## Description
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+This document is the first test serving to extract and process data
 
 ## Running Code
 
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+Import data and library use for the processing
 
 ```{r}
-1 + 1
+#|echo (true) #Show the block’s code in the output.
+#|eval (true) #Run the block’s code.
+#|include (false) #Include the output of the block in the document.
+#|message (true) #Include messages from R.
+#|warning (true) #Include warnings from R.
+#|output (true) #How and whether to include results.
+
+library(tidyverse)
+library(readxl)
+library(ggplot2)
+
+#need to be change when I work in a project
+excel_sheets(path = "C:/Users/Touriere/Desktop/GEN/4A/SIRD/R/Données/donnees_test.xlsx") 
+
+Sample_1 <- read_excel(path = "C:/Users/Touriere/Desktop/GEN/4A/SIRD/R/Données/donnees_test.xlsx", sheet = "Sample_1")
+
 ```
 
-You can add options to executable code like this
+Extracting data from the excel sheet
 
 ```{r}
-#| echo: false
-2 * 2
+#Extrating data from the excel sheet
+
+psi_m <-Sample_1 |> 
+  select(Psi) |> 
+  na.omit()|> 
+  as_tibble()
+
+total_mass <-Sample_1 |> 
+  select(total_mass)|> 
+  na.omit()|> 
+  as_vector()
+
+bag_mass <-Sample_1 |> 
+  select(bag_mass)|> 
+  na.omit()|> 
+  as.numeric()
+
+L_dry_mass <-Sample_1 |> 
+  select(L_dry_mass)|> 
+  na.omit()|> 
+  as.numeric()
+
+L_area <-Sample_1 |> 
+  select(L_area)|> 
+  na.omit() |> 
+  as.numeric()
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+Calculating of useful parameters :
+
+```{r}
+#Calculating useful parameters
+#water mass of the leaf
+
+m_water_leaf = total_mass - bag_mass - L_dry_mass
+# Sample_1<- Sample_1 |>
+ # add_column("mwater"= m_water_leaf, .after = "total_mass",.name_repair = "unique") 
+```
+
+Adding of figures :
+
+```{r}
+tbl_1 <-tibble("m_water_leaf"=m_water_leaf,"Psi"=Sample_1$Psi)
+fig1 <- tbl_1 |> 
+  ggplot(mapping = aes(x = m_water_leaf , y = Psi))+
+  geom_point()+
+  labs(x="Mass of water (g)", y="Water potential (Mpa)")
+fig1
+```
+
+```{r}
+n_row = nrow(Sample_1)
+for (i in 2:n_row) {
+  cal<- tbl_1 |> 
+  slice(1:i) 
+  R_sq= cor(x=cal$m_water_leaf,y=cal$Psi)^2
+  if (R_sq < 0.98) {
+    tlp = i-1
+    break
+  }
+}
+
+#slope of the linear regression
+tbl_tlb <- tbl_1 |> 
+  slice (1:tlp)
+ slope_tlp<- sd(tbl_tlb$m_water_leaf)/sd(tbl_tlb$Psi)
+ Intercept_tlp = mean(tbl_tlb$m_water_leaf)-mean(tbl_tlb$Psi)*slope_tlp
+ 
+ Total_RWC = m_water_leaf / Intercept_tlp
+```
