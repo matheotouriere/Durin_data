@@ -17,3 +17,7 @@ PV_data <- RelativeWaterDeficit(pressure_volume_data) #new column with RWD
 #Turgor loss point f(RWD) = -1/psi
 TurgorLossPoint(PV_data)
 ```
+
+```{r}
+OsmoticPot(PV_data)
+```
