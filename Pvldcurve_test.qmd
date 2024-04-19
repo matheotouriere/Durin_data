@@ -10,4 +10,10 @@ editor: visual
 library(ggplot2)
 library(pvldcurve)
 Leaf_data <- leaf_drying_data
+PV_data <- pressure_volume_data
+
+PV_data <- RelativeWaterDeficit(pressure_volume_data) #new column with RWD
+
+#Turgor loss point f(RWD) = -1/psi
+TurgorLossPoint(PV_data)
 ```
