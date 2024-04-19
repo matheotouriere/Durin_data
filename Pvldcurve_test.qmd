@@ -1,0 +1,13 @@
+---
+title: "Test R packages pvldcurve"
+format: html
+editor: visual
+---
+
+## R package test for curves fitting to calculate turgor loss point
+
+```{r}
+library(ggplot2)
+library(pvldcurve)
+Leaf_data <- leaf_drying_data
+```
