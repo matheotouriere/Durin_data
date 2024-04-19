@@ -14,8 +14,11 @@ PV_data <- pressure_volume_data
 
 PV_data <- RelativeWaterDeficit(pressure_volume_data) #new column with RWD
 
+
 #Turgor loss point f(RWD) = -1/psi
-TurgorLossPoint(PV_data)
+result_pv <- TurgorLossPoint(PV_data, graph = FALSE) 
+  ExtractParam(result_pv)
+  
 ```
 
 ```{r}
