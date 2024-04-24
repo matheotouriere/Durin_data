@@ -9,5 +9,12 @@ date : Today
 ## Data Import
 
 ```{r}
+library(tidyverse)
+library(ggplot2)
+library(readxl)
+library("here")
+field_data <-  read_delim(file = here("Fieldwork_spreadsheet-Samples.csv"))
+
+
 
 ```
