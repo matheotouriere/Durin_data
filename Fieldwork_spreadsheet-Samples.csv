@@ -1,0 +1,9 @@
+envelope_ID,day,month,year,siteID,species,habitat,Collecting time,Sample type,Durin Plot,DroughNet plot ,Logger number,remark,Rehydration,Rehydration day,Rehydration time,Sampling time on field,Dyring sample type,Sample size (cm),Start Drying day,Start drying time,Time between collect and experiment (h),fresh.weigh.harvest,fresh.weigh.satured,Fresh weigh (t=0) (g),fresh weigh (t=30 min) (g),fresh weigh (t=1h) (g),fresh weigh (t=2h) (g),fresh weigh (t=3h) (g),fresh weigh (t=4h) (g),fresh weigh (t=5h) (g),fresh weigh (t=6h) (g),Dry weigh day,Dry weigh time,dry.weigh,Water potential (t=0) (MPa),Water potential (t=30 min) (MPa),Water potential (t=1h) (MPa),Water potential (t=2h) (MPa),Water potential (t=3h) (MPa),Water potential (t=4h) (MPa),Water potential (t=5h) (MPa),Water potential (t=6h) (MPa),dry water potential (MPa)
+1,11,April,2024,Lygra,Calluna vulgaris,Open,14:10,Whole plant,,,,,Yes,,17:34,2 min,Shoot,9,12/04/2024,9:46,,,,,,,,,,,,,,,,,,,,,,,
+2,11,April,2024,Lygra,Calluna vulgaris,Open,14:12,Whole plant,,,,,Yes,,17:35,2 min,Shoot,"5,5",12/04/2024,9:48,,,,,,,,,,,,,,,,,,,,,,,
+3,11,April,2024,Lygra,Vaccinium vitis-idaea,Open,14:15,Whole plant,,,,,Yes,,17:35,3 min,Shoot,7,12/04/2024,9:49,,,,,,,,,,,,,,,,,,,,,,,
+4,11,April,2024,Lygra,Vaccinium vitis-idaea,Open,14:19,Whole plant,,,,,Yes,,17:37,4 min,Shoot,6,12/04/2024,9:51,,,,,,,,,,,,,,,,,,,,,,,
+5,11,April,2024,Lygra,Empetrum nigrum,Open,14:23,Shoot,,,,,Yes,,17:37,2 min,Shoot,"4,5",12/04/2024,9:53,,,,,,,,,,,,,,,,,,,,,,,
+6,11,April,2024,Lygra,Empetrum nigrum,Open,14:24,Shoot,,,,,Yes,,17:38,2 min,Shoot,"5,5",12/04/2024,9:55,,,,,,,,,,,,,,,,,,,,,,,
+7,11,April,2024,Lygra,Vaccinium myrtillus,Open,14:28,Whole plant,,,,,Yes,,17:38,5 min,Shoot,5,12/04/2024,9:56,,,,,,,,,,,,,,,,,,,,,,,
+8,11,April,2024,Lygra,Vaccinium myrtillus,Open,14:45,Whole plant,,,,,Yes,,17:39,15 min,Shoot,7,12/04/2024,9:58,,,,,,,,,,,,,,,,,,,,,,,
