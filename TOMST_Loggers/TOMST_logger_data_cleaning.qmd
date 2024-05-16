@@ -50,11 +50,11 @@ library(officer)
 library(myClim)
 ```
 
-Importing data and metadata from the TOMST loggers files
+Importing metadata from the TOMST loggers files
 
 ```{r data import}
-read_csv(file = "TOMST_Loggers/Lygra30042024/DURIN_Lygra_microclimate_2024_04_30/data_94194601_2024_04_30_0.csv")
-
+library(readr)
+metadata <- read_delim("Lygra_2024_04_30_metadata.csv", delim = ";", escape_double = FALSE, trim_ws = TRUE)
 
 
 ```
@@ -63,21 +63,17 @@ read_csv(file = "TOMST_Loggers/Lygra30042024/DURIN_Lygra_microclimate_2024_04_30
 library(readxl)
 library(tidyverse)
 
-# Chemin vers le fichier Excel contenant les métadonnées
-metadata_path <- "chemin_vers_votre_fichier/metadata.xlsx"
-
-# Charger les données de la feuille "metadata"
-metadata <- read_excel(metadata_path)
 
 # Trouver les colonnes "loggerID" et "plotID"
 loggerIDColumn <- which(names(metadata) == "loggerID")
 plotIDColumn <- which(names(metadata) == "plotID")
 
 # Trier les données par ordre croissant selon la colonne "loggerID"
-metadata <- metadata %>% arrange(metadata[, loggerIDColumn])
+metadata <- metadata |> 
+  arrange(metadata[, loggerIDColumn])
 
 # Sélectionner un dossier à traiter
-folder_path <- choose.dir()
+folder_path <- "C:/Users/Touriere/Desktop/GEN/4A/SIRD/Data/Lygra30042024/DURIN_Lygra_microclimate_2024_04_30_all"      #choose.dir()'
 
 # Lister les fichiers dans le dossier
 file_list <- list.files(folder_path)
@@ -100,11 +96,10 @@ localities_data <- data.frame(
   tz_offset = NA
 )
 
-# Écrire les données dans un fichier Excel
-write.xlsx(path_data, "chemin_vers_votre_dossier/Path.xlsx", row.names = FALSE)
-write.xlsx(localities_data, "chemin_vers_votre_dossier/Localities.xlsx", row.names = FALSE)
 
 # Informer l'utilisateur que le processus est terminé
 cat("Traitement terminé avec succès.\n")
 
 ```
+
+Importing data
