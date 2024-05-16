@@ -15,37 +15,52 @@ library(ggplot2)
 library(readxl)
 library("here")
 library(tidyr)
-field_data <-  read_delim(file = here("Fieldwork_spreadsheet-Samples.csv"))
-
-#probleme lors de l'importation a cause des virgule regader ca une bonne technique serait de construire deux tableau avec mes valeurs puis les fusionner et refaire un tablea
-
-# pv_data_weight <- field_data |>
-#   pivot_longer( cols = 25:32, names_to = "Fresh Weight",values_to = "fresh.weight", values_drop_na = FALSE) 
-# 
-# pv_data_waterpotential <- field_data |>
-#   pivot_longer( cols = 36:43, names_to = "Water potential",values_to = "waterpotential", values_drop_na = FALSE)
-# 
-# pv_data <- bind_cols(pv_data_weight, pv_data_waterpotential)
+library(dplyr)
+field_data <-  read.csv2(file = here("Fieldwork_spreadsheet.csv"))
+#modified data with point and read.csv  or read_delim(file = "data/weather2.csv",locale = locale(decimal_mark = ","))
 
 
-select_data <- select(field_data,"envelope_ID",starts_with("fresh"),starts_with("Water"),"dry.weight") 
+```
 
-index_w0 <- which(names(select_data) == "fresh weight (t=0) (g)")
-index_wf <- which(names(select_data) == "fresh weight (t=6h) (g)")
+```{r}
 
-index_wat0 <- which(names(select_data) == "Water potential (t=0) (Bar)")
-index_watf <- which(names(select_data) == "Water potential (t=6h) (Bar)")
+select_data <- select(field_data,"envelope_ID",starts_with("fresh"),starts_with("Water"),"dry.mass") 
+
+index_w0 <- which(names(select_data) == "fresh.mass.t0.g")
+index_wf <- which(names(select_data) == "fresh.mass.t6h.g")
+
+index_wat0 <- which(names(select_data) == "Water.potential.t0.bar")
+index_watf <- which(names(select_data) == "Water.potential.t6h.bar")
 
 pv_data_w <- select_data |> 
-  pivot_longer( cols = index_w0:index_wf, names_to = "Fresh Weight",values_to = "fresh.weight", values_drop_na = FALSE) |> 
-  select(-starts_with("Water"))
+  pivot_longer( cols = index_w0:index_wf, names_to = "Fresh mass",values_to = "fresh.mass", values_drop_na = FALSE) |> 
+  select(-starts_with("Water"),-"Fresh mass")
 
 pv_data_water <- select_data |> 
   pivot_longer( cols = index_wat0:index_watf, names_to = "Water Potential",values_to = "water.potential", values_drop_na = FALSE) |> 
-  select(-starts_with("fresh"))
+  select(-starts_with("fresh"),-"Water Potential",-"dry.mass",-"envelope_ID") |>  
+  mutate(water.potential = water.potential*0.1)
+  
 
-pv_data <-  left_join(pv_data_w, pv_data_water, by =join_by(envelope_ID,dry.weight)) |> 
-  select(-c("Fresh Weight", "Water Potential"))
+pv_data <- as_tibble(c(pv_data_w,pv_data_water))|>  
+  rename(sample = envelope_ID) |> 
+  filter(sample == 1)
+
+  #join(pv_data_w, pv_data_water, by = join_by(envelope_ID)) |> 
+  
+
+
+```
+
+```{r}
+library(pvcurveanalysis)
+
+pv_data <- RelativeWaterDeficit(pv_data) #new column with RWD
+#PV_data <- PV_data[-(1:1),]
+#Turgor loss point f(RWD) = -1/psi
+result_pv <- TurgorLossPoint(pv_data, graph = FALSE) 
+  ExtractParam(result_pv)
+  
 
 
 ```

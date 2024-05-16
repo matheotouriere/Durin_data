@@ -1,0 +1,53 @@
+---
+title: "TOMST_logger_data_cleaning"
+format: html
+editor: visual
+creator: TOURIERE Mathéo
+date: today
+---
+
+## TOMST loggers data cleaning code
+
+Installing all the packages requiered to run the code
+
+```{r install packages}
+
+install.packages("tidyverse")
+install.packages("lubridate")
+install.packages("dataDownloader")
+install.packages("purrrlyr")
+install.packages("readxl")
+install.packages("fs")
+install.packages("purrr")
+install.packages("readr")
+install.packages("ggplot2")
+install.packages("lme4")
+install.packages("stargazer")
+install.packages("myClim")
+```
+
+Load all the packages needed
+
+```{r load_packages}
+
+library(tidyverse)
+library(lubridate)
+# library(dataDownloader)
+library(purrrlyr)
+library(readxl)
+library(fs)
+library(purrr)
+library(readr)
+library(ggplot2)
+library(lme4)
+library(stargazer)
+library(emmeans)
+library(see)
+library(svglite)
+library(officer)
+library(lmerTest)
+library(officer)
+library(myClim)
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
