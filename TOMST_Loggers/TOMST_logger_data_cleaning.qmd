@@ -53,6 +53,58 @@ library(myClim)
 Importing data and metadata from the TOMST loggers files
 
 ```{r data import}
+read_csv(file = "TOMST_Loggers/Lygra30042024/DURIN_Lygra_microclimate_2024_04_30/data_94194601_2024_04_30_0.csv")
 
+
+
+```
+
+```{r}
+library(readxl)
+library(tidyverse)
+
+# Chemin vers le fichier Excel contenant les métadonnées
+metadata_path <- "chemin_vers_votre_fichier/metadata.xlsx"
+
+# Charger les données de la feuille "metadata"
+metadata <- read_excel(metadata_path)
+
+# Trouver les colonnes "loggerID" et "plotID"
+loggerIDColumn <- which(names(metadata) == "loggerID")
+plotIDColumn <- which(names(metadata) == "plotID")
+
+# Trier les données par ordre croissant selon la colonne "loggerID"
+metadata <- metadata %>% arrange(metadata[, loggerIDColumn])
+
+# Sélectionner un dossier à traiter
+folder_path <- choose.dir()
+
+# Lister les fichiers dans le dossier
+file_list <- list.files(folder_path)
+
+# Créer un data frame pour stocker les chemins des fichiers, les localités et les formats de données
+path_data <- data.frame(
+  path = file.path(folder_path, file_list),
+  locality = gsub("[^0-9]", "", file_list), # Extraire les chiffres du nom du fichier
+  data_format = "TOMST" # Définir le format de données comme "TOMST"
+)
+
+# Créer un data frame pour stocker les localités
+localities_data <- data.frame(
+  locality_id = path_data$locality,
+  plot_id = path_data$locality,
+  localisation = NA,
+  elevation = NA,
+  lon_wgs84 = NA,
+  lat_wgs84 = NA,
+  tz_offset = NA
+)
+
+# Écrire les données dans un fichier Excel
+write.xlsx(path_data, "chemin_vers_votre_dossier/Path.xlsx", row.names = FALSE)
+write.xlsx(localities_data, "chemin_vers_votre_dossier/Localities.xlsx", row.names = FALSE)
+
+# Informer l'utilisateur que le processus est terminé
+cat("Traitement terminé avec succès.\n")
 
 ```
