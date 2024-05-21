@@ -35,6 +35,8 @@ library(lubridate)
 # library(dataDownloader)
 library(purrrlyr)
 library(readxl)
+library(readr)
+library(tidyverse)
 library(fs)
 library(purrr)
 library(readr)
@@ -53,16 +55,12 @@ library(myClim)
 Importing metadata from the TOMST loggers files
 
 ```{r data import}
-library(readr)
 metadata <- read_delim("Lygra_2024_04_30_metadata.csv", delim = ";", escape_double = FALSE, trim_ws = TRUE)
 
 
 ```
 
 ```{r}
-library(readxl)
-library(tidyverse)
-
 
 # Trouver les colonnes "loggerID" et "plotID"
 loggerIDColumn <- which(names(metadata) == "loggerID")
@@ -115,10 +113,36 @@ tms.m <- mc_read_data(files_table = path_data,
 
 ```{r}
 # clean runs automatically while reading
-tms <- mc_prep_clean(tms.m, silent = T) # clean series
+#tms <- mc_prep_clean(tms.m, silent = T) # clean series
+
 #> Warning in mc_prep_clean(tms.m, silent = T): MyClim object is already cleaned.
 #> Repeated cleaning overwrite cleaning informations.
 tms.info <- mc_info_clean(tms) # call cleaning log
 
+# crop the time-series
+start <- as.POSIXct("2023-04-01", tz = "UTC")
+end   <- as.POSIXct("2024-04-30", tz = "UTC")
 
+tms <- mc_prep_crop(tms, start, end)
+
+```
+
+Aggregation
+
+```{r}
+# with defaults only convert Raw-format  to Agg-format
+tms.ag <- mc_agg(tms.m,fun = NULL, period = NULL)
+
+# aggregate to daily mean, range, coverage, and 95 percentile. 
+tms.day <- mc_agg(tms, fun = c("mean", "range", "coverage", "percentile"),
+                percentiles = 95, period = "day", min_coverage = 0.95)
+
+# aggregate all time-series, return one value per sensor.
+tms.all <- mc_agg(tms, fun = c("mean", "range", "coverage", "percentile"),
+                percentiles = 95, period = "all", min_coverage = 0.95)
+
+# aggregate with your custom function. (how many records are below -5°C per month)
+tms.all.custom <- mc_agg(tms.out, fun = list(TMS_T3 = "below5"), period = "month",
+                         custom_functions = list(below5 = function(x){length(x[x<(-5)])}))
+r <- mc_reshape_long(tms.all.custom)
 ```
