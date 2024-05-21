@@ -81,20 +81,22 @@ file_list <- list.files(folder_path)
 # Créer un data frame pour stocker les chemins des fichiers, les localités et les formats de données
 path_data <- data.frame(
   path = file.path(folder_path, file_list),
-  locality = gsub("[^0-9]", "", file_list), # Extraire les chiffres du nom du fichier
+  
+  locality_id  = as.numeric(substr(file_list, 6, 13)), # Extraire les chiffres du nom du fichier
   data_format = "TOMST" # Définir le format de données comme "TOMST"
-)
+) 
 
-# Créer un data frame pour stocker les localités
-localities_data <- data.frame(
-  locality_id = path_data$locality,
-  plot_id = path_data$locality,
-  localisation = NA,
-  elevation = NA,
-  lon_wgs84 = NA,
-  lat_wgs84 = NA,
-  tz_offset = NA
-)
+# Créer un data frame pour stocker que les données utiles
+complete_data <- data.frame(
+  loggerID = path_data$locality)
+complete_data <- left_join(complete_data, metadata, by = join_by(loggerID))
+
+localities_data <- data.frame(locality_id = as.character(complete_data$loggerID))
+  
+# Écrire les données dans un fichier csv
+#write_csv(path_data, "chemin_vers_votre_dossier/Path.xlsx", row.names = FALSE)
+#write_csv(localities_data, "chemin_vers_votre_dossier/Localities.xlsx", row.names = FALSE)
+
 
 
 # Informer l'utilisateur que le processus est terminé
@@ -103,3 +105,20 @@ cat("Traitement terminé avec succès.\n")
 ```
 
 Importing data
+
+```{r}
+tms.m <- mc_read_data(files_table = path_data,
+                      localities_table = localities_data,
+                      silent = T)
+
+```
+
+```{r}
+# clean runs automatically while reading
+tms <- mc_prep_clean(tms.m, silent = T) # clean series
+#> Warning in mc_prep_clean(tms.m, silent = T): MyClim object is already cleaned.
+#> Repeated cleaning overwrite cleaning informations.
+tms.info <- mc_info_clean(tms) # call cleaning log
+
+
+```
