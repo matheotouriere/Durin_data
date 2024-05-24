@@ -8,7 +8,13 @@ date: today
 
 ## TOMST loggers data cleaning code
 
-Installing all the packages requiered to run the code
+remove all
+
+```{r}
+rm(list = ls(all.names = TRUE))
+```
+
+Installing all the packages required to run the code
 
 ```{r install packages}
 
@@ -55,7 +61,7 @@ library(myClim)
 Importing metadata from the TOMST loggers files
 
 ```{r data import}
-metadata <- read_delim("Lygra_2024_04_30_metadata.csv", delim = ";", escape_double = FALSE, trim_ws = TRUE)
+metadata <- read_delim("Lygra_2024_04_30_metadata.csv", delim = ";", escape_double = FALSE, trim_ws = TRUE, col_names=TRUE, col_types=c("c","c","n","c","c","n","c","c","n","n","D","D","D","c"))
 
 
 ```
@@ -71,7 +77,7 @@ metadata <- metadata |>
   arrange(metadata[, loggerIDColumn])
 
 # Sélectionner un dossier à traiter
-folder_path <- "C:/Users/Touriere/Desktop/GEN/4A/SIRD/Data/Lygra30042024/DURIN_Lygra_microclimate_2024_04_30_all"      #choose.dir()'
+folder_path <- "C:/Users/Touriere/Desktop/GEN/4A/SIRD/Data/Lygra30042024/DURIN_Lygra_microclimate_2024_04_30_test"      #choose.dir()'
 
 # Lister les fichiers dans le dossier
 file_list <- list.files(folder_path)
@@ -80,69 +86,200 @@ file_list <- list.files(folder_path)
 path_data <- data.frame(
   path = file.path(folder_path, file_list),
   
-  locality_id  = as.numeric(substr(file_list, 6, 13)), # Extraire les chiffres du nom du fichier
+  loggerID  = as.integer(substr(file_list, 6, 13)), # Extraire les chiffres du nom du fichier
   data_format = "TOMST" # Définir le format de données comme "TOMST"
-) 
+  )
 
 # Créer un data frame pour stocker que les données utiles
-complete_data <- data.frame(
-  loggerID = path_data$locality)
-complete_data <- left_join(complete_data, metadata, by = join_by(loggerID))
+active_metadata <- data.frame(loggerID = path_data$loggerID) |> 
+   left_join(metadata, by = join_by(loggerID))
 
-localities_data <- data.frame(locality_id = as.character(complete_data$loggerID))
+
+path_data <- path_data |> 
+   mutate(locality_id=as.character(active_metadata$loggerID)) |> 
+   mutate(serial_number=as.character(active_metadata$loggerID)) |> 
+            select(path,locality_id,data_format,serial_number) #put colomn in the right ordre
+
+
+localities_data <- data.frame(
+    locality_id = as.character(active_metadata$loggerID),
+    plot_id = active_metadata$plotID,
+    site = active_metadata$site)
   
 # Écrire les données dans un fichier csv
 #write_csv(path_data, "chemin_vers_votre_dossier/Path.xlsx", row.names = FALSE)
 #write_csv(localities_data, "chemin_vers_votre_dossier/Localities.xlsx", row.names = FALSE)
 
 
-
-# Informer l'utilisateur que le processus est terminé
-cat("Traitement terminé avec succès.\n")
-
 ```
 
 Importing data
 
 ```{r}
-tms.m <- mc_read_data(files_table = path_data,
+tms <- mc_read_data(files_table = path_data,
                       localities_table = localities_data,
-                      silent = T)
+                      silent = TRUE, clean = TRUE)
 
-```
 
-```{r}
-# clean runs automatically while reading
-#tms <- mc_prep_clean(tms.m, silent = T) # clean series
+tms.verif <- tms |> 
+  mc_reshape_long()
+
 
 #> Warning in mc_prep_clean(tms.m, silent = T): MyClim object is already cleaned.
 #> Repeated cleaning overwrite cleaning informations.
 tms.info <- mc_info_clean(tms) # call cleaning log
 
-# crop the time-series
-start <- as.POSIXct("2023-04-01", tz = "UTC")
-end   <- as.POSIXct("2024-04-30", tz = "UTC")
+
+
+```
+
+Cropping (don't work but I don't know why)
+
+```{r}
+
+# Assurez-vous que active_metadata contient les dates de début et de fin pour chaque loggerID
+start <-  as.POSIXct(as.Date(active_metadata$date_in, format = "%d/%m/%Y"), tz = "UTC")
+end <- as.POSIXct(as.Date(active_metadata$date_collect, format = "%d/%m/%Y"), tz = "UTC")
+
 
 tms <- mc_prep_crop(tms, start, end)
 
+
+
+```
+
+cropping to start reading at date_in (not efficient but works)
+
+```{r}
+
+# Create an empty list to store the results of mc_prep_crop()
+tms_crop <- vector("list", length(tms$localities))
+tms_crop_t <- vector("list", 1)
+
+#initialiasing my croping vectors
+  start <- as.POSIXct(as.Date(active_metadata$date_in[1], format = "%d/%m/%Y"), tz = "UTC")
+  end <- as.POSIXct(as.Date(active_metadata$date_collect[1], format = "%d/%m/%Y"), tz = "UTC")
+
+ # Apply mc_prep_crop() and save the result in tms_crop[i].
+  tms_crop_t <- mc_prep_crop(tms[1], start)
+
+# For loop to apply mc_prep_crop() to each element of tms
+for (i in 2:length(tms$localities)) {
+  start <- as.POSIXct(as.Date(active_metadata$date_in[i], format = "%d/%m/%Y"), tz = "UTC")
+  end <- as.POSIXct(as.Date(active_metadata$date_collect[i], format = "%d/%m/%Y"), tz = "UTC")
+
+  
+  tms_crop <- mc_prep_crop(tms[i], start)
+  tms_crop_t <- mc_prep_merge(list(tms_crop_t,tms_crop))
+}
+tms <- tms_crop_t
+rm(tms_crop,tms_crop_t)
+```
+
+Extracting data by sensor types
+
+```{r}
+tms.TMS_T1 <- tms |> 
+  mc_reshape_long() |> 
+  filter(sensor_name == "TMS_T1")
+
+tms.TMS_T2 <- tms |> 
+  mc_reshape_long() |> 
+  filter(sensor_name == "TMS_T2")
+
+tms.TMS_T3 <- tms |> 
+  mc_reshape_long() |> 
+  filter(sensor_name == "TMS_T3")
+
+tms.TMS_moist <- tms |> 
+  mc_reshape_long() |> 
+  filter(sensor_name == "TMS_moist")
+
+# aggregate with your custom function. (how many records are below -100°C per month)
+tms.all.custom <- mc_agg(tms, fun = list(TMS_T3 = "below100"), period = "month",
+                         custom_functions = list(below100 = function(x){length(x[x<(-10)])}))
+r <- mc_reshape_long(tms.all.custom) #pb avec les valeurs enlevée
 ```
 
 Aggregation
 
 ```{r}
-# with defaults only convert Raw-format  to Agg-format
-tms.ag <- mc_agg(tms.m,fun = NULL, period = NULL)
+  # with defaults only convert Raw-format  to Agg-format
+  tms.ag <- mc_agg(tms,fun = NULL, period = NULL)
+  tms.ag.verif <- tms.ag |> 
+  mc_reshape_long()
 
 # aggregate to daily mean, range, coverage, and 95 percentile. 
 tms.day <- mc_agg(tms, fun = c("mean", "range", "coverage", "percentile"),
                 percentiles = 95, period = "day", min_coverage = 0.95)
+tms.day.verif <- tms.day |> 
+  mc_reshape_long()
 
 # aggregate all time-series, return one value per sensor.
 tms.all <- mc_agg(tms, fun = c("mean", "range", "coverage", "percentile"),
                 percentiles = 95, period = "all", min_coverage = 0.95)
+tms.all.verif <- tms.all |> 
+  mc_reshape_long()
 
 # aggregate with your custom function. (how many records are below -5°C per month)
-tms.all.custom <- mc_agg(tms.out, fun = list(TMS_T3 = "below5"), period = "month",
+tms.all.custom <- mc_agg(tms, fun = list(TMS_T3 = "below5"), period = "month",
                          custom_functions = list(below5 = function(x){length(x[x<(-5)])}))
 r <- mc_reshape_long(tms.all.custom)
+```
+
+Calculation
+
+```{r}
+tms.out  <- tms #mc_filter(tms, localities = "94194601.000000", reverse = T) # exclude one locality.
+
+## calculate virtual sensor VWC from raw TMS moisture signal
+tms.calc <- mc_calc_vwc(tms.out, soiltype = "loamy sand A") #reseach on soiltype
+
+## virtual sensor with growing and freezing degree days
+tms.calc <- mc_calc_gdd(tms.calc, sensor = "TMS_T3",)
+tms.calc <- mc_calc_fdd(tms.calc, sensor = "TMS_T3")
+
+## virtual sensor to estimate snow presence from 2 cm air temperature 
+tms.calc <- mc_calc_snow(tms.calc, sensor = "TMS_T2")
+
+## summary data.frame of snow estimation
+tms.snow <- mc_calc_snow_agg(tms.calc)
+
+```
+
+MyClim environmental variables
+
+```{r}
+temp_env  <- mc_env_temp(tms, period = "month", min_coverage = 0.9,)
+moist_env <- mc_env_moist(tms.calc, period = "all", min_coverage = 0.9)
+```
+
+list to data frame
+
+```{r}
+## wide table of air temperature and soil moisture
+tms.wide <- mc_reshape_wide(tms.calc, sensors = c("TMS_T3", "vwc"))
+
+## long table of air temperature and soil moisture
+tms.long <- mc_reshape_long(tms.calc, sensors = c("TMS_T3", "vwc"))
+
+tms.long.all <- mc_reshape_long(tms.all)
+```
+
+Plotting
+
+```{r}
+## lines
+tms.plot <- mc_filter(tms, localities = "94194601")
+
+p <- mc_plot_line(tms.plot, sensors = c("TMS_T3", "TMS_T1", "TMS_moist"))
+p <- p+ggplot2::scale_x_datetime(date_breaks = "1 week", date_labels = "%W")
+p <- p+ggplot2::xlab("week")
+p <- p+ggplot2::aes(size = sensor_name)
+p <- p+ggplot2::scale_size_manual(values = c(1, 1 ,2))
+p <- p+ggplot2::guides(size = "none")
+p <- p+ggplot2::scale_color_manual(values = c("hotpink", "pink", "darkblue"), name = NULL)
+
+## raster
+mc_plot_raster(tms, sensors = c("TMS_T3"))
 ```
