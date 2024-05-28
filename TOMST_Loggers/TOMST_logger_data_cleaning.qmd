@@ -133,16 +133,18 @@ tms.info <- mc_info_clean(tms) # call cleaning log
 
 ```
 
-Cropping (don't work but I don't know why)
+Cropping with myClim package and vector
 
 ```{r}
 
 # Assurez-vous que active_metadata contient les dates de début et de fin pour chaque loggerID
 start <-  as.POSIXct(as.Date(active_metadata$date_in, format = "%d/%m/%Y"), tz = "UTC")
 end <- as.POSIXct(as.Date(active_metadata$date_collect, format = "%d/%m/%Y"), tz = "UTC")
+localities = as.vector(names(tms$localities))
 
 
-tms <- mc_prep_crop(tms, start, end)
+tms <- mc_prep_crop(tms, start, end, localities)
+tms.info <- mc_info_clean(tms)
 
 
 
