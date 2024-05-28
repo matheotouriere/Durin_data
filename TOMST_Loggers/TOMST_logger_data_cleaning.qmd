@@ -77,7 +77,7 @@ metadata <- metadata |>
   arrange(metadata[, loggerIDColumn])
 
 # Sélectionner un dossier à traiter
-folder_path <- "C:/Users/Touriere/Desktop/GEN/4A/SIRD/Data/Lygra30042024/DURIN_Lygra_microclimate_2024_04_30_test"      #choose.dir()'
+folder_path <- "C:/Users/Touriere/Desktop/GEN/4A/SIRD/Data/Lygra30042024/DURIN_Lygra_microclimate_2024_04_30_all"      #choose.dir()'
 
 # Lister les fichiers dans le dossier
 file_list <- list.files(folder_path)
@@ -121,8 +121,8 @@ tms <- mc_read_data(files_table = path_data,
                       silent = TRUE, clean = TRUE)
 
 
-tms.verif <- tms |> 
-  mc_reshape_long()
+#tms.verif <- tms |> 
+#  mc_reshape_long()
 
 
 #> Warning in mc_prep_clean(tms.m, silent = T): MyClim object is already cleaned.
@@ -198,9 +198,9 @@ tms.TMS_moist <- tms |>
   mc_reshape_long() |> 
   filter(sensor_name == "TMS_moist")
 
-# aggregate with your custom function. (how many records are below -100°C per month)
-tms.all.custom <- mc_agg(tms, fun = list(TMS_T3 = "below100"), period = "month",
-                         custom_functions = list(below100 = function(x){length(x[x<(-10)])}))
+# aggregate with your custom function. (how many records are below -10°C per month)
+tms.all.custom <- mc_agg(tms, fun = list(TMS_T3 = "below10"), period = "month",
+                         custom_functions = list(below10 = function(x){length(x[x<(-10)])}))
 r <- mc_reshape_long(tms.all.custom) #pb avec les valeurs enlevée
 ```
 
@@ -225,7 +225,7 @@ tms.all.verif <- tms.all |>
   mc_reshape_long()
 
 # aggregate with your custom function. (how many records are below -5°C per month)
-tms.all.custom <- mc_agg(tms, fun = list(TMS_T3 = "below5"), period = "month",
+tms.all.custom <- mc_agg(tms, fun = list(TMS_T3 = "below5"), period = "month",                              min_coverage = 0.8,
                          custom_functions = list(below5 = function(x){length(x[x<(-5)])}))
 r <- mc_reshape_long(tms.all.custom)
 ```
@@ -233,10 +233,10 @@ r <- mc_reshape_long(tms.all.custom)
 Calculation
 
 ```{r}
-tms.out  <- tms #mc_filter(tms, localities = "94194601.000000", reverse = T) # exclude one locality.
+tms.out <- tms# <- mc_filter(tms, localities = "94195243", reverse = F) #keep one locality
 
 ## calculate virtual sensor VWC from raw TMS moisture signal
-tms.calc <- mc_calc_vwc(tms.out, soiltype = "loamy sand A") #reseach on soiltype
+tms.calc <- mc_calc_vwc(tms.out, soiltype = "universal") #reseach on soiltype and TOMST VERSION
 
 ## virtual sensor with growing and freezing degree days
 tms.calc <- mc_calc_gdd(tms.calc, sensor = "TMS_T3",)
@@ -250,11 +250,23 @@ tms.snow <- mc_calc_snow_agg(tms.calc)
 
 ```
 
+add snow days number
+
+```{r}
+tms.snow$locality_id = as.numeric(tms.snow$locality_id)
+tms.snow.metada <- active_metadata |>
+  rename(locality_id = loggerID) |>
+  left_join(tms.snow, by =join_by(locality_id))
+tms.snow.number <- tms.snow.metada |> 
+  group_by(plotID) |> 
+  summarise(mean_snow_day = sd(snow_days))
+```
+
 MyClim environmental variables
 
 ```{r}
 temp_env  <- mc_env_temp(tms, period = "month", min_coverage = 0.9,)
-moist_env <- mc_env_moist(tms.calc, period = "all", min_coverage = 0.9)
+moist_env <- mc_env_moist(tms.calc, period = "month", min_coverage = 0.9)
 ```
 
 list to data frame
