@@ -6,7 +6,7 @@ creator: TOURIERE Mathéo
 date: today
 ---
 
-## TOMST loggers data cleaning code
+## Importing and filtering data
 
 remove all
 
@@ -58,15 +58,10 @@ library(officer)
 library(myClim)
 ```
 
-Importing metadata from the TOMST loggers files
+### Importing metadata from the TOMST loggers files
 
 ```{r data import}
 metadata <- read_delim("Lygra_2024_04_30_metadata.csv", delim = ";", escape_double = FALSE, trim_ws = TRUE, col_names=TRUE, col_types=c("c","c","n","c","c","n","c","c","n","n","D","D","D","c"))
-
-
-```
-
-```{r}
 
 # Trouver les colonnes "loggerID" et "plotID"
 loggerIDColumn <- which(names(metadata) == "loggerID")
@@ -77,7 +72,7 @@ metadata <- metadata |>
   arrange(metadata[, loggerIDColumn])
 
 # Sélectionner un dossier à traiter
-folder_path <- "C:/Users/Touriere/Desktop/GEN/4A/SIRD/Data/Lygra30042024/DURIN_Lygra_microclimate_2024_04_30_all"      #choose.dir()'
+folder_path <- "C:/Users/Touriere/Desktop/GEN/4A/SIRD/Data/Lygra30042024/DURIN_Lygra_microclimate_2024_04_30_test"      #choose.dir()'
 
 # Lister les fichiers dans le dossier
 file_list <- list.files(folder_path)
@@ -104,26 +99,24 @@ path_data <- path_data |>
 localities_data <- data.frame(
     locality_id = as.character(active_metadata$loggerID),
     plot_id = active_metadata$plotID,
-    site = active_metadata$site)
+    site = active_metadata$site,
+    habitat = active_metadata$land_type )
   
 # Écrire les données dans un fichier csv
 #write_csv(path_data, "chemin_vers_votre_dossier/Path.xlsx", row.names = FALSE)
 #write_csv(localities_data, "chemin_vers_votre_dossier/Localities.xlsx", row.names = FALSE)
 
-
 ```
 
-Importing data
+### Importing all the data
 
 ```{r}
 tms <- mc_read_data(files_table = path_data,
                       localities_table = localities_data,
                       silent = TRUE, clean = TRUE)
 
-
 #tms.verif <- tms |> 
 #  mc_reshape_long()
-
 
 #> Warning in mc_prep_clean(tms.m, silent = T): MyClim object is already cleaned.
 #> Repeated cleaning overwrite cleaning informations.
@@ -133,12 +126,14 @@ tms.info <- mc_info_clean(tms) # call cleaning log
 
 ```
 
-Cropping with myClim package and vector
+### Cropping with myClim package and vector
 
 ```{r}
 
-# Assurez-vous que active_metadata contient les dates de début et de fin pour chaque loggerID
-start <-  as.POSIXct(as.Date(active_metadata$date_in, format = "%d/%m/%Y"), tz = "UTC")
+# Start and end are list 
+#start <-  as.POSIXct(as.Date(active_metadata$date_in, format = "%d/%m/%Y"), tz = "UTC")
+start <-  as.POSIXct(as.Date("01/07/2023", format = "%d/%m/%Y"), tz = "UTC")
+# we choose this date to have the same data for all TMS loggers
 end <- as.POSIXct(as.Date(active_metadata$date_collect, format = "%d/%m/%Y"), tz = "UTC")
 localities = as.vector(names(tms$localities))
 
@@ -152,7 +147,7 @@ tms.info <- mc_info_clean(tms)
 
 cropping to start reading at date_in (not efficient but works)
 
-```{r}
+```{r cropping with a loop}
 
 # Create an empty list to store the results of mc_prep_crop()
 tms_crop <- vector("list", length(tms$localities))
@@ -179,6 +174,128 @@ rm(tms_crop,tms_crop_t)
 tms.info <- mc_info_clean(tms) # call cleaning log
 ```
 
+### filtering metadata by site: Lygra, Sogndal, Kautokeino, Senja
+
+```{r filtering by site}
+
+site <- list(unique(active_metadata$site))
+
+#filtering to only have data from lygra
+ly_metadata <- active_metadata |> 
+  filter(site == "Lygra") 
+
+ly_metadata <-list("all_serial" = ly_metadata$loggerID,
+                "Open"=filter(ly_metadata,land_type == "Open")$loggerID,
+              "Forested"=filter(ly_metadata,land_type == "Forested")$loggerID,
+           "DroughtNet"=filter(ly_metadata,land_type == "DroughtNet")$loggerID)
+  
+#filtering to only have data from sogndal
+so_metadata <- active_metadata |> 
+  filter(site == "Sogndal") 
+
+so_metadata <-list("all_serial"=so_metadata$loggerID,
+                "Open"=filter(so_metadata,land_type == "Open")$loggerID,
+              "Forested"=filter(so_metadata,land_type == "Forested")$loggerID)
+  
+#filtering to only have data from Senja
+se_metadata <- active_metadata |> 
+  filter(site == "Senja") 
+
+se_metadata <-list("all_serial"=se_metadata$loggerID,
+                "Open"=filter(se_metadata,land_type == "Open")$loggerID,
+              "Forested"=filter(se_metadata,land_type == "Forested")$loggerID)
+ 
+#filtering to only have data from Kautokeino
+ka_metadata <- active_metadata |> 
+  filter(site == "Kautokeino") 
+
+ka_metadata <-list("all_serial"=ka_metadata$loggerID,
+                "Open"=filter(ka_metadata,land_type == "Open")$loggerID,
+              "Forested"=filter(ka_metadata,land_type == "Forested")$loggerID)
+```
+
+### filtering data by habitat : open vs forested (or DroughNet) for each site
+
+```{r Data from lygra}
+#filtering data for lygra
+if(length(unique(ly_metadata$all_serial))!=0)
+{
+tms.ly  <- tms |> 
+  mc_filter( localities = ly_metadata$all_serial, reverse = F)
+}
+
+if(length(unique(ly_metadata$Open))!=0) 
+{
+tms.ly.open <- tms |> 
+  mc_filter( localities = ly_metadata$Open, reverse = F)
+}
+if(length(unique(ly_metadata$Forested))!=0) 
+{
+tms.ly.forested <- tms |> 
+  mc_filter( localities = ly_metadata$Forested, reverse = F)
+}
+if(length(unique(ly_metadata$DroughtNet))!=0) 
+{
+tms.ly.DroughtNet <- tms |> 
+  mc_filter( localities = ly_metadata$DroughtNet, reverse = F)
+}
+
+#filtering data from Sogndal
+if(length(unique(so_metadata$all_serial))!=0)
+{
+tms.so  <- tms |> 
+  mc_filter( localities = so_metadata$all_serial, reverse = F)
+}
+if(length(unique(so_metadata$Open))!=0) 
+{
+tms.so.open <- tms |> 
+  mc_filter( localities = so_metadata$Open, reverse = F)
+}
+if(length(unique(so_metadata$Forested))!=0) 
+{
+tms.so.forested <- tms |> 
+  mc_filter( localities = so_metadata$Forested, reverse = F)
+}
+
+#filtering data for Senja
+if(length(unique(se_metadata$all_serial))!=0)
+{
+tms.se  <- tms |> 
+  mc_filter( localities = se_metadata$all_serial, reverse = F)
+}
+
+if(length(unique(se_metadata$Open))!=0) 
+{
+tms.se.open <- tms |> 
+  mc_filter( localities = se_metadata$Open, reverse = F)
+}
+if(length(unique(se_metadata$Forested))!=0) 
+{
+tms.se.forested <- tms |> 
+  mc_filter( localities = se_metadata$Forested, reverse = F)
+}
+
+#filtering data for Kautokeino
+if(length(unique(ka_metadata$all_serial))!=0)
+{
+tms.ka  <- tms |> 
+  mc_filter( localities = ka_metadata$all_serial, reverse = F)
+}
+
+if(length(unique(ka_metadata$Open))!=0) 
+{
+tms.ka.open <- tms |> 
+  mc_filter( localities = ka_metadata$Open, reverse = F)
+}
+if(length(unique(ka_metadata$Forested))!=0) 
+{
+tms.ka.forested <- tms |> 
+  mc_filter( localities = ka_metadata$Forested, reverse = F)
+}
+```
+
+## Data testing code
+
 Extracting data by sensor types
 
 ```{r}
@@ -198,10 +315,22 @@ tms.TMS_moist <- tms |>
   mc_reshape_long() |> 
   filter(sensor_name == "TMS_moist")
 
-# aggregate with your custom function. (how many records are below -10°C per month)
-tms.all.custom <- mc_agg(tms, fun = list(TMS_T3 = "below10"), period = "month",
-                         custom_functions = list(below10 = function(x){length(x[x<(-10)])}))
-r <- mc_reshape_long(tms.all.custom) #pb avec les valeurs enlevée
+# aggregate with your custom function. (how many records are below -20°C per month)
+tms.all.custom <- mc_agg(tms, fun = list(TMS_T1 = "below20"), period = "month",                             min_coverage = 0.1,
+                         custom_functions = list(below20 = function(x){length(x[x<(-20)])}))
+r_T1 <- mc_reshape_long(tms.all.custom) 
+
+tms.all.custom <- mc_agg(tms, fun = list(TMS_T2 = "below20"), period = "month",                             min_coverage = 0.1,
+                         custom_functions = list(below20 = function(x){length(x[x<(-20)])}))
+r_T2 <- mc_reshape_long(tms.all.custom) 
+
+tms.all.custom <- mc_agg(tms, fun = list(TMS_T3 = "below20"), period = "month",                             min_coverage = 0.1,
+                         custom_functions = list(below20 = function(x){length(x[x<(-20)])}))
+r_T3 <- mc_reshape_long(tms.all.custom) 
+
+tms.all.custom <- mc_agg(tms, fun = list(TMS_moist = "over_range"), period = "month",                             min_coverage = 0.1,
+                         custom_functions = list(over_range = function(x){length(x[x>(3600)])}))
+r_moist <- mc_reshape_long(tms.all.custom) 
 ```
 
 Aggregation
@@ -225,7 +354,7 @@ tms.all.verif <- tms.all |>
   mc_reshape_long()
 
 # aggregate with your custom function. (how many records are below -5°C per month)
-tms.all.custom <- mc_agg(tms, fun = list(TMS_T3 = "below5"), period = "month",                              min_coverage = 0.8,
+tms.all.custom <- mc_agg(tms, fun = list(TMS_T3 = "below5"), period = "month",                              min_coverage = 0.5,
                          custom_functions = list(below5 = function(x){length(x[x<(-5)])}))
 r <- mc_reshape_long(tms.all.custom)
 ```
@@ -296,5 +425,40 @@ p <- p+ggplot2::guides(size = "none")
 p <- p+ggplot2::scale_color_manual(values = c("hotpink", "pink", "darkblue"), name = NULL)
 
 ## raster
-mc_plot_raster(tms, sensors = c("TMS_T3"))
+mc_plot_raster(tms, sensors = c("TMS_moist"))
+```
+
+## Microclimat analysis for Lygra
+
+```{r calculation for all the data}
+   
+## calculate virtual sensor VWC from raw TMS moisture signal
+tms.ly.calc <- mc_calc_vwc(tms.ly, soiltype = "universal") #reseach on soiltype and TOMST VERSION
+
+## virtual sensor with growing and freezing degree days
+tms.ly.calc <- mc_calc_gdd(tms.ly.calc, sensor = "TMS_T3",)
+tms.ly.calc <- mc_calc_fdd(tms.ly.calc, sensor = "TMS_T3")
+
+## virtual sensor to estimate snow presence from 2 cm air temperature 
+tms.ly.calc <- mc_calc_snow(tms.ly.calc, sensor = "TMS_T2")
+
+## summary data.frame of snow estimation
+tms.snow <- mc_calc_snow_agg(tms.ly.calc)
+ 
+temp_env  <- mc_env_temp(tms.ly, period = "day", min_coverage = 0.9)
+moist_env <- mc_env_moist(tms.ly.calc, period = "day", min_coverage = 0.9)
+
+
+
+
+```
+
+```{r calculation for the open habitat}
+
+moist.mean.ly.open <- tms.ly.open |> 
+   mc_calc_vwc( soiltype = "universal") |> 
+   mc_env_moist(period = "day", min_coverage = 0.9) |> 
+  filter(sensor_name == "VWC.soil_0_15_cm.mean") 
+  
+
 ```

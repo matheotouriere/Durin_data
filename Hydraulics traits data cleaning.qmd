@@ -16,51 +16,115 @@ library(readxl)
 library("here")
 library(tidyr)
 library(dplyr)
-field_data <-  read.csv2(file = here("Fieldwork_spreadsheet.csv"))
-#modified data with point and read.csv  or read_delim(file = "data/weather2.csv",locale = locale(decimal_mark = ","))
-
-
-```
-
-```{r}
-
-select_data <- select(field_data,"envelope_ID",starts_with("fresh"),starts_with("Water"),"dry.mass") 
-
-index_w0 <- which(names(select_data) == "fresh.mass.t0.g")
-index_wf <- which(names(select_data) == "fresh.mass.t6h.g")
-
-index_wat0 <- which(names(select_data) == "Water.potential.t0.bar")
-index_watf <- which(names(select_data) == "Water.potential.t6h.bar")
-
-pv_data_w <- select_data |> 
-  pivot_longer( cols = index_w0:index_wf, names_to = "Fresh mass",values_to = "fresh.mass", values_drop_na = FALSE) |> 
-  select(-starts_with("Water"),-"Fresh mass")
-
-pv_data_water <- select_data |> 
-  pivot_longer( cols = index_wat0:index_watf, names_to = "Water Potential",values_to = "water.potential", values_drop_na = FALSE) |> 
-  select(-starts_with("fresh"),-"Water Potential",-"dry.mass",-"envelope_ID") |>  
-  mutate(water.potential = water.potential*0.1)
-  
-
-pv_data <- as_tibble(c(pv_data_w,pv_data_water))|>  
-  rename(sample = envelope_ID) |> 
-  filter(sample == 1)
-
-  #join(pv_data_w, pv_data_water, by = join_by(envelope_ID)) |> 
-  
-
-
-```
-
-```{r}
 library(pvcurveanalysis)
 
-pv_data <- RelativeWaterDeficit(pv_data) #new column with RWD
+field_data <-  read.csv(file = here("Fieldwork_spreadsheet.csv"),dec = ",")
+
+```
+
+Creation of the data frame needed for the analysis
+
+```{r}
+
+select_data <- select(field_data,"envelope_ID",starts_with("fresh"),starts_with("water"),"dry.weight") 
+
+index_w0 <- which(names(select_data) == "fresh.weight.0")
+index_wf <- which(names(select_data) == "fresh.weight.13")
+
+index_wat0 <- which(names(select_data) == "water.potential.0")
+index_watf <- which(names(select_data) == "water.potential.13")
+
+ pv_data_weight <- select_data |> 
+    select(envelope_ID, fresh.weight.0:fresh.weight.13,fresh.weight.harvest,fresh.weight.satured,dry.weight) |> 
+   pivot_longer(cols = fresh.weight.0:fresh.weight.13,values_to = "fresh.weight")|>
+  select(-name)
+
+pv_data_water<- select_data |> 
+    select(envelope_ID, water.potential.0:water.potential.13) |> 
+    pivot_longer(cols = water.potential.0:water.potential.13 ,  values_to = "water.potential") |> 
+  select(-name) 
+
+pv_data <- na.omit(data.frame(c(pv_data_weight,
+                                select(pv_data_water,water.potential) )))
+
+pv_data <- RelativeWaterDeficit(pv_data, fresh.mass = "fresh.weight", dry.mass = "dry.weight", fresh.mass.saturated = "fresh.weight.satured") #new column with RWD
+
+```
+
+Creation of plots
+
+```{r}
+# Function for ploting PV curves
+plot_water_potential <- function(data) {
+  # Vérifier que les colonnes nécessaires sont présentes dans le dataframe
+  if (!all(c("water.potential", "RWD", "envelope_ID") %in% colnames(data))) {
+    stop("columns 'water.potential', 'RWD', et 'envelope_ID' need to be in the dataframe")
+  }
+  
+  # Calculation -1 / water.potential
+  data$neg_inverse_water_potential <- -1 / data$water.potential
+  
+  # ID of the samples
+  unique_samples <- unique(data$envelope_ID)
+  
+  # list to store plots
+  plot_list <- list()
+  
+  # plot PVc for each sample
+  for (sample in unique_samples) {
+    sample_data <- data[data$envelope_ID == sample, ]
+    
+    p <- ggplot(sample_data, aes(x = RWD, y = neg_inverse_water_potential)) +
+      geom_point() +
+      #geom_line() +
+      labs(
+        title = paste("Sample", sample, "Pressure-Volume curve"),
+        x = "Relative Water Deficit (RWD)",
+        y = "-1 / Water Potential (MPa^-1)"
+      ) +
+      theme_minimal()
+    
+    # add plot in the list
+    plot_list[[as.character(sample)]] <- p
+  }
+  
+  return(plot_list)
+}
+
+```
+
+using the plot function :
+
+```{r}
+# Exemple d'utilisation de la fonction
+# Supposons que votre dataframe s'appelle df
+ plot_list <- plot_water_potential(pv_data)
+
+# Afficher les graphiques
+ for (p in plot_list) {
+   print(p)
+ }
+```
+
+Calculation of the turgor loss point
+
+```{r}
+#pv_data <- pv_data[pv_data$plateau != "yes",] 
+
 #PV_data <- PV_data[-(1:1),]
 #Turgor loss point f(RWD) = -1/psi
-result_pv <- TurgorLossPoint(pv_data, graph = FALSE) 
-  ExtractParam(result_pv)
-  
+
+# result_pv1 <- TurgorLossPoint(pv_data, sample = "envelope_ID", graph = TRUE) 
+# water.potential.tlp <- ExtractParam(result_pv1)
+
+result_pv <- OsmoticPot(pv_data, sample = "envelope_ID", graph = TRUE) 
+osmotic.pot <- ExtractParam(result_pv)
+
+result_elasticity <- ModElasticity(pv_data, sample = "envelope_ID", graph = TRUE) 
+mod.elas <- ExtractParam(result_elasticity)
+
+
+
 
 
 ```
