@@ -1,0 +1,430 @@
+---
+#title: "Hydraulics Traits data cleaning"
+#format: html
+#editor: visual
+#author : Mathéo TOURIERE
+#date : Today
+---
+
+## Data Import
+
+```{r include: FALSE}
+
+rm(list = ls())
+library(tidyverse)
+library(ggplot2)
+library(readxl)
+#library("here")
+library(tidyr)
+library(dplyr)
+library(pvcurveanalysis)
+library(googlesheets4)
+library(imager)
+library(jsonlite)
+
+
+#local import (without internet)
+#field_data <-  read.csv(file = here("Fieldwork_spreadsheet.csv"),dec = ",")
+
+```
+
+importing data from google sheet
+
+```{r importing directly from google sheet if internet}
+
+# Authentification 
+gs4_auth()
+
+#URL google sheet
+sheet_PV_url <- "https://docs.google.com/spreadsheets/d/1NXFZCGgbadWr4-rOg-YzXA_Oogk4Kti_uWWhwoU-knc/edit?gid=1002499086#gid=1002499086" #Pv data
+sheet_SP_url <- "https://docs.google.com/spreadsheets/d/1S2ruGvcPbTalryl_l5ROC57WxArjDPjvbv6DEaFjq6g/edit?gid=1277829208#gid=1277829208"  #Stomatal data
+
+
+# Read
+PV_data <- read_sheet(sheet_PV_url)
+SP_data <- read_sheet(sheet_SP_url, sheet = "Stomatal density")
+cond_data <- read_sheet(sheet_SP_url, sheet = "Conductance")
+cond_data$collection_time <- cond_data$collection_time |> 
+  as.POSIXct(format="%Y-%m-%d %H:%M:%S") |> 
+  format(format="%H:%M:%S")
+```
+
+## Stomatal analysis
+
+```{r calculation Stomatal density}
+
+SP_data <- SP_data|> 
+  mutate(habitat = ifelse(is.na(habitat), DroughtTrt, habitat)) |> 
+   mutate(stomatal_density_S1 = rowMeans(select(SP_data,starts_with("stomatal_peels_S1")), na.rm = TRUE)/0.07068583) |> 
+     mutate(stomatal_density_S2 = rowMeans(select(SP_data,starts_with("stomatal_peels_S2")), na.rm = TRUE)/0.07068583) |>
+     mutate(stomatal_density_S3 = rowMeans(select(SP_data,starts_with("stomatal_peels_S3")), na.rm = TRUE)/0.07068583) |>
+    mutate(across(starts_with("stomatal_density"), ~ ifelse(is.nan(.), NA, .)))
+
+
+```
+
+Calcul de la surface moyenne des stomates
+
+```{r calculation of the stomatal area}
+
+# Chargement des annotations
+#annotations <- fromJSON("D:/Utilisateurs/Touriere/Téléchargements/DURIN_SP_area_test.v2i.coco-segmentation/train/_annotations.coco.json")
+
+annotations <- fromJSON("C:/Users/Touriere/Desktop/GEN/4A/SIRD/Data/Stomatal_peels/DURIN_SP_area.v5i.coco-segmentation/train/_annotations.coco.json")
+
+
+annotations_df <- as.data.frame(annotations$annotations)
+images_df <- as.data.frame(annotations$images)
+images_df$file_name <- gsub("-", ".", images_df$file_name)
+
+images_df_DN <-  subset(images_df, grepl("DN", file_name))|> 
+    mutate(photo_id = substr(file_name, 1, 18)) |> 
+    mutate(plant_id = substr(file_name, 1, 12))
+
+images_df <- subset(images_df, !grepl("DN", file_name))|>
+    mutate(photo_id = substr(file_name, 1, 14)) |> 
+    mutate(plant_id = substr(file_name, 1, 8)) 
+#  rbind(images_df_DN)
+
+#calculation for open and forested
+# Charger les catégories pour obtenir le nom des classes
+categories_df <- as.data.frame(annotations$categories)
+
+# Fusionner les annotations avec les catégories pour obtenir le nom des classes
+annotations_df_OF <- merge(annotations_df, images_df, by.x = "image_id", by.y = "id")
+annotations_df_OF <- merge(annotations_df_OF, categories_df, by.x = "category_id", by.y = "id")  |> 
+  select(category_id, image_id, id, area, plant_id, photo_id, "classe_name" = name) |> 
+  mutate(species = substr(photo_id, 6, 7))
+
+# Filtrer pour la classe cible
+target_annotations <- annotations_df_OF |> 
+  filter(classe_name == "DURIN-stomatal-peels_VM_pol")
+
+optique_info <- annotations_df_OF |> 
+  filter(classe_name == "Optique") |> 
+  mutate(area_mm2 = 0.07068583471) |> 
+  mutate(conversion_factor = area_mm2 / area)
+
+target_annotations<- target_annotations |> 
+  merge(select(optique_info, image_id, conversion_factor)) |> 
+  mutate(area_mm2 = area*conversion_factor) 
+
+stomata_surface_OF <- target_annotations |> 
+  group_by(image_id) |> 
+  summarise(mean_area_mm2_sample = mean(area_mm2)) |>
+  ungroup() |> 
+  left_join(target_annotations, by = "image_id") |> 
+  distinct(image_id, .keep_all = TRUE) |> 
+  select(plant_id, species, image_id, photo_id, mean_area_mm2_sample)  #mean of all the stomatas present on the picture
+
+mean_stomata_surface_OF <- stomata_surface_OF|>
+  group_by(plant_id) |> 
+  summarise(mean_area_mm2 = mean(mean_area_mm2_sample)) |>
+  mutate(mean_area_um2 = mean_area_mm2*10^6) |> 
+  ungroup() |> 
+  left_join(target_annotations, by = "plant_id") |> 
+  distinct(plant_id, .keep_all = TRUE) |> 
+  select(species, plant_id, mean_area_mm2, mean_area_um2)  #mean of the size for all the pictures for one plant 
+
+#calculation for DN
+# Fusionner les annotations avec les catégories pour obtenir le nom des classes
+annotations_df_DN <- merge(annotations_df, images_df_DN, by.x = "image_id", by.y = "id")
+annotations_df_DN <- merge(annotations_df_DN, categories_df, by.x = "category_id", by.y = "id") |> 
+  select(category_id, image_id, id, area, height, width, plant_id, photo_id, "classe_name" = name) |> 
+  mutate(species = substr(photo_id, 10, 11))
+
+# Filtrer pour la classe cible
+target_annotations_DN <- annotations_df_DN |> 
+  filter(classe_name == "DURIN-stomatal-peels_VM_pol")
+
+optique_info_DN <- annotations_df_DN |> 
+  filter(classe_name == "Optique") |> 
+  mutate(area_mm2 = 0.07068583471) |> 
+  mutate(conversion_factor = area_mm2 / area)
+
+target_annotations_DN<- target_annotations_DN |> 
+  merge(select(optique_info_DN, image_id, conversion_factor)) |> 
+  mutate(area_mm2 = area*conversion_factor) 
+
+stomata_surface_DN <- target_annotations_DN |> 
+   group_by(image_id) |> 
+  summarise(mean_area_mm2_sample = mean(area_mm2)) |>
+  ungroup() |> 
+  left_join(target_annotations_DN, by = "image_id") |> 
+  distinct(image_id, .keep_all = TRUE) |> 
+  select(plant_id, species, image_id, photo_id, mean_area_mm2_sample)
+
+mean_stomata_surface_DN <- stomata_surface_DN |> 
+  group_by(plant_id) |> 
+  summarise(mean_area_mm2 = mean(mean_area_mm2_sample)) |> 
+  mutate(mean_area_um2 = mean_area_mm2*10^6) |> 
+  ungroup() |> 
+  left_join(target_annotations_DN, by = "plant_id") |> 
+  distinct(plant_id, .keep_all = TRUE) |> 
+  select(species, plant_id, mean_area_mm2, mean_area_um2)
+
+stomata_surface <- rbind(stomata_surface_OF,stomata_surface_DN)
+
+
+mean_stomata_surface <- rbind(mean_stomata_surface_OF,mean_stomata_surface_DN)
+
+SP_data <- SP_data|>
+  mutate(stomatal_density_mean_p = rowMeans(select(SP_data,starts_with("stomatal_density")), na.rm = TRUE))
+
+SP_data <- mean_stomata_surface |> 
+  select(-species) |> 
+  left_join(SP_data, by = "plant_id") |> 
+  relocate(mean_area_mm2, mean_area_um2, .after = stomatal_density_mean_p)
+
+```
+
+environment cleaning
+
+```{r}
+# Liste de tous les objets dans l'environnement
+all_objects <- ls()
+
+# Objets à conserver
+keep_objects <- c("SP_data", "PV_data", "stomata_surface", "mean_stomata_surface", "cond_data")
+
+# Objets à supprimer (tous sauf ceux à conserver)
+remove_objects <- setdiff(all_objects, keep_objects)
+
+# Supprimer les objets à supprimer
+rm(list = remove_objects)
+
+```
+
+Conductance analysis
+
+```{r}
+
+cond_data <- cond_data |> 
+    mutate(stomatal_conductance_mean_p = rowMeans(select(cond_data,starts_with("stomatal_conductance")), na.rm = TRUE)) |> 
+  mutate(stomatal_conductance_sd_p = apply(select(cond_data, starts_with("stomatal_conductance")), 1, sd, na.rm = TRUE))
+
+
+stomatal_conductance_mean <- cond_data |> 
+group_by(species, siteID, habitat) |> 
+  summarize(mean_conductance = mean(stomatal_conductance_mean_p, na.rm = TRUE),
+            sd_conductance = sd(stomatal_conductance_mean_p, na.rm = TRUE)) |> 
+  ungroup()
+
+cond_data<- cond_data |> 
+  left_join(stomatal_conductance_mean, by = join_by(siteID, species, habitat)) |>
+  mutate(stomatal_conductance_min = mean_conductance - sd_conductance,
+         stomatal_conductance_max = mean_conductance + sd_conductance)
+
+cond_data_r <- cond_data |>
+  rename(species_full = species) |> 
+  mutate(species = case_when(
+    species_full == "Vaccinium vitis-idaea" ~ "VV",
+    species_full == "Vaccinium myrtillus" ~ "VM",
+    TRUE ~ NA_character_  # pour toutes les autres espèces, mettre NA
+  )) |> 
+  select(species, DroughtTrt, DroughtNet_plot, Nearest_plotID, starts_with("stomatal_conductance")) |> 
+   mutate(cond_code = case_when(
+    !is.na(Nearest_plotID) ~ paste0(species, "-", Nearest_plotID),
+    is.na(Nearest_plotID) ~ paste0(species, "-", DroughtNet_plot)
+  ))
+
+cond_data_OF <- cond_data_r |> 
+  filter(is.na(DroughtNet_plot))
+
+cond_data_DN <- cond_data_r |> 
+  filter(!is.na(DroughtNet_plot))
+
+
+SP_data <- SP_data |> 
+  rename(species_full = species) |> 
+  mutate(species = case_when(
+    species_full == "Vaccinium vitis-idaea" ~ "VV",
+    species_full == "Vaccinium myrtillus" ~ "VM",
+    TRUE ~ NA_character_  # pour toutes les autres espèces, mettre NA
+  )) |> 
+   mutate(cond_code = case_when(
+    !is.na(Nearest_plotID) ~ paste0(species, "-", Nearest_plotID),
+    is.na(Nearest_plotID) ~ paste0(species, "-", DroughtNet_Plot)
+  ))
+  
+  SP_data <- SP_data |> 
+  left_join(select(cond_data_r, cond_code, stomatal_conductance_mean_p, stomatal_conductance_min, stomatal_conductance_max), by = "cond_code") |> 
+    distinct(plant_id, .keep_all = TRUE)
+
+```
+
+filtering
+
+```{r}
+
+
+SP_data_OF <-subset(SP_data, is.na(DroughtTrt))
+SP_data_DN <-subset(SP_data, !is.na(ageClass))
+SP_data_LY_O<- SP_data |> 
+  filter(siteID == "Lygra") |> 
+  filter( habitat != "Forested")
+
+SP_data_OF <- SP_data_OF |> 
+  select(-ageClass, -DroughtNet_Plot, -DroughtTrt)
+
+SP_data_DN <- SP_data_DN |> 
+  select(-habitat, -Nearest_plotID)
+```
+
+plotting
+
+```{r}
+
+
+base <- ggplot(SP_data_OF, aes(x = species, y = stomatal_density_mean_p))
+
+p_box <- base + geom_boxplot(aes(fill = species))
+p_box_2 <- base + geom_boxplot(aes(fill = siteID))
+p_vio <- base + geom_violin(aes(fill = species))
+p_vio_2 <- base + geom_violin(aes(fill = siteID))
+p_point <- base + geom_point(aes(colour = species))
+p_jit <- base + geom_jitter(aes(colour = species))
+library(ggforce)
+p_sina <- base + geom_sina(aes(colour = species))
+
+p_box
+p_box_2
+p_vio 
+p_vio_2
+p_point
+p_jit
+library(ggforce)
+p_sina
+
+
+#mutate(stomatal_conductance = rowMeans(select(SP_data,starts_with("stomatal_density")), na.rm = TRUE))
+
+```
+
+2
+
+```{r}
+stomatal_density_mean_LY_O <- SP_data_LY_O |> 
+group_by(species, siteID, habitat) |> 
+  summarize(mean_stomatal_density = mean(stomatal_density_mean_p, na.rm = TRUE),
+            sd_stomatal_density = sd(stomatal_density_mean_p, na.rm = TRUE),
+            mean_stomatal_size = mean(mean_area_um2, na.rm = TRUE),
+            sd_stomatal_size = sd(mean_area_um2, na.rm = TRUE),
+  ) |> 
+  ungroup()
+SP_data_LY_O<- SP_data_LY_O |> 
+  left_join(stomatal_density_mean_LY_O, by = join_by(siteID, species, habitat)) |>
+  mutate(stomatal_density_min = mean_stomatal_density - sd_stomatal_density,
+         stomatal_density_max = mean_stomatal_density + sd_stomatal_density,
+         stomatal_size_min = mean_stomatal_size - sd_stomatal_size,
+         stomatal_size_max = mean_stomatal_size + sd_stomatal_size)
+```
+
+dez0
+
+```{r}
+f_grid_stomatal <-  ggplot(SP_data_OF,aes(x = species, y = stomatal_density_mean_p))+
+  geom_boxplot(aes(fill = habitat)) +
+  facet_grid(. ~ siteID)
+f_grid_stomatal
+
+#f_wrap <- facet_wrap()
+
+p_box2 <- SP_data_LY_O|> 
+  ggplot(aes(x = species, y = stomatal_density_mean_p, fill = habitat)) +
+  geom_boxplot(position = position_dodge(width = 0.75)) + # Spécifier la même position_dodge pour les boxplots
+  geom_errorbar(aes(ymin = stomatal_density_min, ymax = stomatal_density_max), width = 0.2, position = position_dodge(width = 0.75)) + # Spécifier la même position_dodge pour les barres d'erreur
+  labs(x = "Species", y = "Stomatal Density Mean", fill = "Habitat")
+p_box2
+
+p_box3 <- SP_data_LY_O|> 
+   ggplot(aes(x = species, y = mean_area_um2, fill = habitat)) +
+  geom_boxplot(position = position_dodge(width = 0.75)) + # Spécifier la même position_dodge pour les boxplots
+  geom_errorbar(aes(ymin = stomatal_size_min, ymax = stomatal_size_max), width = 0.2, position = position_dodge(width = 0.75)) + # Spécifier la même position_dodge pour les barres d'erreur
+  labs(x = "Species", y = "Mean Stomatal Area (um2)", fill = "Habitat")
+p_box3
+```
+
+ldme
+
+```{r}
+stomatal_density_mean <- SP_data_OF |> 
+group_by(species, siteID, habitat) |> 
+  summarize(mean_stomatal_density = mean(stomatal_density_mean_p, na.rm = TRUE),
+            sd_stomatal_density = sd(stomatal_density_mean_p, na.rm = TRUE),
+            mean_stomatal_size = mean(mean_area_um2, na.rm = TRUE),
+            sd_stomatal_size = sd(mean_area_um2, na.rm = TRUE),
+  ) |> 
+  ungroup()
+
+SP_data_OF<- SP_data_OF |> 
+  left_join(stomatal_density_mean, by = join_by(siteID, species, habitat)) |>
+  mutate(stomatal_density_min = mean_stomatal_density - sd_stomatal_density,
+         stomatal_density_max = mean_stomatal_density + sd_stomatal_density,
+         stomatal_size_min = mean_stomatal_size - sd_stomatal_size,
+         stomatal_size_max = mean_stomatal_size + sd_stomatal_size)
+```
+
+mlde
+
+```{r}
+
+
+f_grid_stomatal_density <- ggplot(SP_data_OF, aes(x = species, y = stomatal_density_mean_p, fill = habitat)) +
+  geom_boxplot() +
+  geom_errorbar(aes(ymin = SP_data_OF$stomatal_density_min, ymax = SP_data_OF$stomatal_density_max), width = 0.2, position = position_dodge(width = 0.75)) +
+  facet_grid(. ~ siteID) +
+  labs(x = "Species", y = "Stomatal Density")
+
+# Afficher le graphique
+print(f_grid_stomatal_density)
+
+f_grid_stomatal_size <- ggplot(SP_data_OF, aes(x = species, y = mean_area_um2, fill = habitat)) +
+  geom_boxplot() +
+  geom_errorbar(aes(ymin = SP_data_OF$stomatal_size_min, ymax = SP_data_OF$stomatal_size_max), width = 0.2, position = position_dodge(width = 0.75)) +
+  facet_grid(. ~ siteID) +
+  labs(x = "Species", y = "Stomatal size") 
+
+# Afficher le graphique
+print(f_grid_stomatal_size)
+
+# Créer le graphique avec les points et les barres d'erreur
+f_grid_stomatal_tradeoff <- ggplot(SP_data_OF, aes(x = mean_area_um2, y = stomatal_density_mean_p, color = species)) +
+  geom_point(aes(shape = species), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+ # geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
+  facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
+  labs(x = "Stomatal Area (µm2)", y = "Stomatal Density")
+
+# Afficher le graphique
+print(f_grid_stomatal_tradeoff)
+
+f_grid_stomatal_cond <-SP_data_OF |> 
+  filter(!is.na(stomatal_conductance_mean_p)) |> 
+  ggplot(aes(x = stomatal_density_mean_p, y = stomatal_conductance_mean_p, fill = habitat)) +
+  geom_point(aes(shape = species), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+ # geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
+  facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
+  labs(x = "Stomatal Density", y = "Stomatal conductance")
+# Afficher le graphique
+print(f_grid_stomatal_cond)
+
+f_grid_stomatal_cond2 <-SP_data_OF |> 
+  filter(!is.na(stomatal_conductance_mean_p)) |> 
+  ggplot(aes(x = mean_area_um2, y = stomatal_conductance_mean_p, fill = habitat)) +
+  geom_point(aes(shape = species), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+  facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
+  labs(x = "Stomatal size", y = "Stomatal conductance")
+# Afficher le graphique
+print(f_grid_stomatal_cond2)
+
+f_grid_stomatal_cond3 <- ggplot(SP_data_OF, aes(x = species, y = stomatal_conductance_mean_p, fill = habitat)) +
+  geom_boxplot() +
+  geom_errorbar(aes(ymin = SP_data_OF$stomatal_conductance_min, ymax = SP_data_OF$stomatal_conductance_max), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
+  facet_grid(. ~ siteID) +
+  labs(x = "Species", y = "Stomatal conductance")
+
+print(f_grid_stomatal_cond3)
+```

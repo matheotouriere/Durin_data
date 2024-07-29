@@ -1,0 +1,913 @@
+---
+#title: "Hydraulics Traits data cleaning"
+#format: html
+#editor: visual
+#author : Mathéo TOURIERE
+#date : Today
+---
+
+## Data Import
+
+```{r include: FALSE}
+rm(list = ls())
+
+library(tidyverse)
+library(ggplot2)
+library(readxl)
+library(readr)
+#library("here")
+library(tidyr)
+library(dplyr)
+library(pvcurveanalysis)
+library(googlesheets4)
+library(imager)
+library(jsonlite)
+
+
+#local import (without internet)
+#field_data <-  read.csv(file = here("Fieldwork_spreadsheet.csv"),dec = ",")
+
+```
+
+importing data from google sheet
+
+```{r importing directly from google sheet if internet}
+
+# Authentification 
+gs4_auth()
+
+#URL google sheet
+sheet_PV_url <- "https://docs.google.com/spreadsheets/d/1NXFZCGgbadWr4-rOg-YzXA_Oogk4Kti_uWWhwoU-knc/edit?gid=1002499086#gid=1002499086" #Pv data
+sheet_SP_url <- "https://docs.google.com/spreadsheets/d/1S2ruGvcPbTalryl_l5ROC57WxArjDPjvbv6DEaFjq6g/edit?gid=1277829208#gid=1277829208"  #Stomatal data
+
+sheet_leaf_url <- "https://docs.google.com/spreadsheets/d/1EqU78hhb4Wz3RC8UMinqQU4T99QZ7FaDTXUW8krT_OU/edit?gid=0#gid=0"
+
+# Read
+PV_data <- read_sheet(sheet_PV_url)
+SP_data <- read_sheet(sheet_SP_url, sheet = "Stomatal density")
+cond_data <- read_sheet(sheet_SP_url, sheet = "Conductance")
+cond_data$collection_time <- cond_data$collection_time |> 
+  as.POSIXct(format="%Y-%m-%d %H:%M:%S") |> 
+  format(format="%H:%M:%S")
+# Read
+leaf_trait_data <-  suppressWarnings(read_sheet(sheet_leaf_url, sheet = "Data", 
+                              col_types = "cdcdccccccccddcccccdddcdddddddddccccDcccc"))
+
+```
+
+## Stomatal analysis
+
+```{r}
+rm(list = setdiff(ls(), c("PV_data", "SP_data", "cond_data","leaf_trait_data")))
+```
+
+Calculation of the stomatal traits
+
+```{r calculation of the stomatal area}
+
+# Loading annotations 
+#annotations <- fromJSON("D:/Utilisateurs/Touriere/Téléchargements/DURIN_SP_area.v10i.coco-segmentation/train/_annotations.coco.json")
+
+annotations <- fromJSON("C:/Users/Touriere/Desktop/GEN/4A/SIRD/Data/Stomatal_peels/DURIN_SP_area.v14i.coco/_annotations.coco.json")
+
+annotations_df <- as.data.frame(annotations$annotations)
+images_df <- as.data.frame(annotations$images)
+images_df$file_name <- gsub("-", ".", images_df$file_name)
+
+images_df_DN <-  subset(images_df, grepl("DN", file_name))|> 
+    mutate(photo_id = substr(file_name, 1, 18)) |> 
+    mutate(plant_id = substr(file_name, 1, 12))
+
+images_df <- subset(images_df, !grepl("DN", file_name))|>
+    mutate(photo_id = substr(file_name, 1, 14)) |> 
+    mutate(plant_id = substr(file_name, 1, 8)) 
+#  rbind(images_df_DN)
+
+
+categories_df <- as.data.frame(annotations$categories)
+
+#calculation for open and forested
+annotations_df_OF <- merge(annotations_df, images_df, by.x = "image_id", by.y = "id")
+annotations_df_OF <- merge(annotations_df_OF, categories_df, by.x = "category_id", by.y = "id")  |> 
+  select(category_id, image_id, id, area, plant_id, photo_id, "classe_name" = name) |> 
+  mutate(species = substr(photo_id, 6, 7))
+
+#calculation for DN
+annotations_df_DN <- merge(annotations_df, images_df_DN, by.x = "image_id", by.y = "id")
+annotations_df_DN <- merge(annotations_df_DN, categories_df, by.x = "category_id", by.y = "id") |> 
+  select(category_id, image_id, id, area, plant_id, photo_id, "classe_name" = name) |> 
+  mutate(species = substr(photo_id, 10, 11))
+
+annotations_df <- rbind(annotations_df_OF, annotations_df_DN)
+
+# Filter for target class
+target_annotations <- annotations_df |> 
+  filter(classe_name == "DURIN-stomatal-peels_VM_pol")
+
+area_correction_annotations <- annotations_df |> 
+  filter(classe_name == "area_correction") |> 
+  group_by(image_id) |> 
+  summarise(area_correction = sum(area)) |>
+  ungroup() 
+
+optique_info <- annotations_df |> 
+  filter(classe_name == "Optique") |> 
+  mutate(area_mm2 = 0.07068583471) |> 
+  mutate(conversion_factor = area_mm2 / area) |> 
+  left_join(area_correction_annotations, by = "image_id")|> 
+  mutate(area_correction = replace(area_correction, is.na(area_correction), 0)) |> 
+  #mutate(area_correction_mm2 = (area_mm2 - area_correction*conversion_factor)) #not working because the area is not calculate in the same way for two objects differents
+  mutate(area_correction_mm2 = 0.07068583471)
+  
+target_annotations<- target_annotations |> 
+  merge(select(optique_info, image_id, conversion_factor, area_correction_mm2))
+
+
+#calculation of the stomatal density for all the pictures
+  #loop for extracting the stomatal count
+SP_data_photo_id <- data.frame()
+for (i in 1:3)
+{
+for (j in 1:3)
+{
+SP_data_photo_id <- SP_data|> 
+  select(plant_id, paste0("stomatal_peels_S",i,"_P",j)) |> 
+  mutate(photo_id = paste0(plant_id, "_S",i,"_P",j), leaf_id = paste0(plant_id, "_S",i)) |> 
+    rename(stomatal_count = starts_with("stomatal_peels_S")) |>
+  rbind(SP_data_photo_id)
+}
+}
+
+  #calculation of the densities
+SP_data_density <- optique_info|>
+  select(photo_id, species, area_correction_mm2) |> 
+  left_join(SP_data_photo_id, by = "photo_id") |> 
+  select(plant_id, photo_id, leaf_id, species, area_correction_mm2, stomatal_count) |> 
+  mutate(stomatal_density_p = stomatal_count / area_correction_mm2)
+
+  #adding metadatas 
+ SP_data_density <- SP_data |>
+  select(plant_id, siteID, habitat, DroughtNet_Plot, DroughtTrt) |> 
+  left_join(SP_data_density, by = "plant_id") |> 
+  mutate(habitat = if_else(is.na(habitat), DroughtTrt, habitat)) |> 
+  select(-DroughtNet_Plot, -DroughtTrt)
+
+  #calculation of the mean density for all the leaves
+leaf_id_density_mean <- SP_data_density |> 
+  group_by(leaf_id) |> 
+  summarise(leaf_mean_stomatal_density = mean(stomatal_density_p,  na.rm = TRUE),
+            leaf_sd_stomatal_density = sd(stomatal_density_p,  na.rm = TRUE)) |>
+  mutate(variation = leaf_sd_stomatal_density / leaf_mean_stomatal_density*100) |> 
+  ungroup()
+
+ 
+   #calculation of the mean density for all the plant
+plant_id_density_mean <- SP_data_density |> 
+  group_by(plant_id) |> 
+  summarise(mean_stomatal_density = mean(stomatal_density_p,  na.rm = TRUE),
+            sd_stomatal_density = sd(stomatal_density_p,  na.rm = TRUE)) |>
+ ungroup() |> 
+  left_join(SP_data_density, by = "plant_id") |> 
+  distinct(plant_id, .keep_all = TRUE) |> 
+  select( plant_id, siteID, species, mean_stomatal_density, sd_stomatal_density)  #mean of the size for all the pictures for one plant 
+
+
+
+#calculation of the mean and the sd of the stomatal density
+habitat_density_mean<- SP_data_density|> 
+  group_by(siteID, habitat, species) |> 
+  summarise(mean_stomatal_density = mean(stomatal_density_p,  na.rm = TRUE),
+            sd_stomatal_density = sd(stomatal_density_p,  na.rm = TRUE)) |>
+  ungroup()
+
+
+
+
+# Filtrer les données avec variation > 25%
+filtered_data <- leaf_id_density_mean %>% filter(variation > 25)
+
+
+# Création d'une copie de SP_data_density pour le nettoyage
+SP_data_density_clean <- SP_data_density |> 
+  group_by()
+
+# Liste des leaf_id uniques à traiter
+leaf_filtered_id <- unique(filtered_data$leaf_id)
+
+# Boucle pour chaque leaf_filtered_id
+for (leaf_id_loop in leaf_filtered_id) {
+  # Obtenir les données correspondantes dans SP_data_density
+  sp_data <- filter(SP_data_density_clean, SP_data_density_clean$leaf_id == leaf_id_loop)
+  
+    mean_values <- sp_data$stomatal_density_p
+    diffs <- abs(mean_values - mean(mean_values))
+    
+    # Identifier l'index de la mesure la plus éloignée
+    max_diff_index <- which.max(diffs)
+    photo_id_clean <- sp_data$photo_id[max_diff_index]
+    
+    # Supprimer cette mesure de SP_data_density_clean
+    SP_data_density_clean <- SP_data_density_clean[-(which(SP_data_density_clean$photo_id == photo_id_clean)), ]
+  
+}
+
+# Recalculer les moyennes et variations pour le dataset nettoyé
+leaf_id_density_mean_clean <- SP_data_density_clean %>%
+  group_by(leaf_id) %>%
+  summarise(
+    leaf_mean_stomatal_density = mean(stomatal_density_p,  na.rm = TRUE),
+    leaf_sd_stomatal_density = sd(stomatal_density_p,  na.rm = TRUE),
+    variation = (leaf_sd_stomatal_density / leaf_mean_stomatal_density) * 100
+  )
+
+# Afficher le dataset nettoyé
+
+```
+
+Area calculation
+
+```{r}
+
+#calculation of the stomatal area
+stomata_surface <- target_annotations |> 
+  mutate(area_mm2 = area * conversion_factor) |> 
+  group_by(image_id) |> 
+  summarise(mean_stomatal_area_mm2_p = mean(area_mm2)) |>
+  mutate(mean_stomatal_area_um2_p = mean_stomatal_area_mm2_p*10^6) |> #calculation of the mean for one picture 
+  ungroup() |> 
+  left_join(distinct(target_annotations,image_id, .keep_all = TRUE), by = "image_id") |> 
+  select(plant_id, species, photo_id, mean_stomatal_area_mm2_p, mean_stomatal_area_um2_p) |>  
+  left_join(select(distinct(SP_data_density, plant_id, .keep_all = TRUE), plant_id, siteID, habitat), by = "plant_id") #mean of all the stomatas present on the picture
+
+
+plant_id_stomata_surface <- stomata_surface|>
+  group_by(plant_id) |> 
+  summarise(mean_stomatal_area_um2 = mean(mean_stomatal_area_um2_p,  na.rm = TRUE),
+            sd_area_um2 = sd(mean_stomatal_area_um2_p,  na.rm = TRUE)) |> 
+  ungroup() |> 
+  left_join(stomata_surface, by = "plant_id") |> 
+  distinct(plant_id, .keep_all = TRUE) |> 
+  select( plant_id, siteID, species, mean_stomatal_area_um2, sd_area_um2)  #mean of the size for all the pictures for one plant 
+
+#calculation of the mean and the sd of the stomatal surface
+habitat_stomata_surface<- stomata_surface|> 
+  group_by(siteID, habitat, species) |> 
+  summarise(mean_stomatal_area_um2 = mean(mean_stomatal_area_um2_p,  na.rm = TRUE),
+            sd_area_um2 = sd(mean_stomatal_area_um2_p,  na.rm = TRUE)) |>
+  ungroup()
+
+#adding the plant_id mean to the initial data frame
+SP_data <- SP_data |>
+  left_join(select(plant_id_density_mean,plant_id, mean_stomatal_density), by = "plant_id") |> 
+  left_join(select(plant_id_stomata_surface, plant_id, mean_stomatal_area_um2), by = "plant_id")
+
+
+stomatal_errorbar <- SP_data_density |> 
+group_by(species, siteID, habitat) |> 
+  summarize(mean_stomatal_density = mean(stomatal_density_p, na.rm = TRUE),
+            sd_stomatal_density = sd(stomatal_density_p, na.rm = TRUE)) |> 
+  ungroup()
+
+#adding error bar for error plot
+stomatal_errorbar <- stomata_surface |> 
+group_by(species, siteID, habitat) |> 
+  summarize(mean_stomatal_area = mean(mean_stomatal_area_um2_p, na.rm = TRUE),
+            sd_stomatal_area = sd(mean_stomatal_area_um2_p, na.rm = TRUE)) |> 
+  ungroup() |> 
+  left_join(stomatal_errorbar, by = join_by(species, siteID, habitat))
+            
+
+SP_data_density <- SP_data_density |> 
+  left_join(stomatal_errorbar, by = join_by(siteID, species, habitat)) |>
+  mutate(stomatal_density_min = mean_stomatal_density - sd_stomatal_density,
+         stomatal_density_max = mean_stomatal_density + sd_stomatal_density) |> 
+  select(-mean_stomatal_density, -sd_stomatal_density, -mean_stomatal_area, -sd_stomatal_area)
+
+SP_data_area <- stomata_surface |> 
+  left_join(stomatal_errorbar, by = join_by(siteID, species, habitat)) |>
+  mutate(stomatal_area_min = mean_stomatal_area - sd_stomatal_area,
+         stomatal_area_max = mean_stomatal_area + sd_stomatal_area) |> 
+  select(-mean_stomatal_density, -sd_stomatal_density, -mean_stomatal_area, -sd_stomatal_area)
+
+
+SP_data_picture <- SP_data_density |>
+  left_join(SP_data_area, by = join_by(plant_id, siteID, habitat, photo_id, species))
+```
+
+Conductance analysis
+
+```{r}
+
+cond_data <- cond_data |> 
+    mutate(stomatal_conductance_mean_p = rowMeans(select(cond_data,starts_with("stomatal_conductance")), na.rm = TRUE)) |> 
+  mutate(stomatal_conductance_sd_p = apply(select(cond_data, starts_with("stomatal_conductance")), 1, sd, na.rm = TRUE))
+
+
+stomatal_conductance_mean <- cond_data |> 
+group_by(species, siteID, habitat) |> 
+  summarize(mean_conductance = mean(stomatal_conductance_mean_p, na.rm = TRUE),
+            sd_conductance = sd(stomatal_conductance_mean_p, na.rm = TRUE)) |> 
+  ungroup()
+
+cond_data<- cond_data |> 
+  left_join(stomatal_conductance_mean, by = join_by(siteID, species, habitat)) |>
+  mutate(stomatal_conductance_min = mean_conductance - sd_conductance,
+         stomatal_conductance_max = mean_conductance + sd_conductance)
+
+cond_data_r <- cond_data |>
+  rename(species_full = species) |> 
+  mutate(species = case_when(
+    species_full == "Vaccinium vitis-idaea" ~ "VV",
+    species_full == "Vaccinium myrtillus" ~ "VM",
+    TRUE ~ NA_character_  # pour toutes les autres espèces, mettre NA
+  )) |> 
+  select(species, DroughtTrt, DroughtNet_plot, Nearest_plotID, starts_with("stomatal_conductance")) |> 
+   mutate(cond_code = case_when(
+    !is.na(Nearest_plotID) ~ paste0(species, "-", Nearest_plotID),
+    is.na(Nearest_plotID) ~ paste0(species, "-", DroughtNet_plot)
+  ))
+
+cond_data_OF <- cond_data_r |> 
+  filter(is.na(DroughtNet_plot))
+
+cond_data_DN <- cond_data_r |> 
+  filter(!is.na(DroughtNet_plot))
+
+
+SP_data <- SP_data |> 
+  rename(species_full = species) |> 
+  mutate(species = case_when(
+    species_full == "Vaccinium vitis-idaea" ~ "VV",
+    species_full == "Vaccinium myrtillus" ~ "VM",
+    TRUE ~ NA_character_  # pour toutes les autres espèces, mettre NA
+  )) |> 
+   mutate(cond_code = case_when(
+    !is.na(Nearest_plotID) ~ paste0(species, "-", Nearest_plotID),
+    is.na(Nearest_plotID) ~ paste0(species, "-", DroughtNet_Plot)
+  ))
+  
+  SP_data <- SP_data |> 
+  left_join(select(cond_data_r, cond_code, stomatal_conductance_mean_p, stomatal_conductance_min, stomatal_conductance_max), by = "cond_code") |> 
+    distinct(plant_id, .keep_all = TRUE)
+
+```
+
+Importation of leaf area
+
+```{r}
+leaf_area_PI_Rey <- read.csv("D:/Utilisateurs/Touriere/Documents/SIRD_leaf_area/Calculation/2024_DURIN_Leaf_Scans_1907_PI_REY/Output/DURIN_Calculated_Leaf_Area_2024_07_19.csv")
+leaf_area_PI_Grogu <- read.csv("D:/Utilisateurs/Touriere/Documents/SIRD_leaf_area/Calculation/2024_DURIN_leaf_scans_1907_PI_Grogu/Output/DURIN_Calculated_Leaf_Area_2024_07_19_grogu.csv")
+
+leaf_area_PI <- rbind(leaf_area_PI_Rey,leaf_area_PI_Grogu)
+rm(leaf_area_PI_Grogu, leaf_area_PI_Rey)
+
+#edit wrong ID
+
+leaf_area_PI <- leaf_area_PI |> 
+  arrange(ID)
+
+new_ids <- c("IBW3196", "ITA6153", "GQX9461", "GRB7361", "IOP353", "GRI3259", "GTT1344")
+
+# Modifier les IDs des 7 premières lignes
+leaf_area_PI$ID[1:7] <- new_ids
+library(dplyr)
+
+leaf_area_PI <- leaf_area_PI |> 
+  select("envelope_ID" = ID, "leaves_count" = n, leaf_area)
+
+
+leaf_trait_data <-  leaf_trait_data |> 
+  mutate(across(where(is.character), ~replace(., . == "Not Applicable", NA)))
+leaf_trait_data$plant_nr <- as.double(leaf_trait_data$plant_nr)
+
+leaf_trait_data_join <- SP_data |> 
+  select(day, month, year, siteID, habitat, species_full, DroughtTrt,  DroughtNet_Plot, PlantNR, Nearest_plotID) |> 
+  rename(species = species_full, DroughNet_plotID = DroughtNet_Plot, plant_nr = PlantNR, nearest_DURIN_plotID = Nearest_plotID) |> 
+  left_join(leaf_trait_data, by = join_by(day, month, year, siteID, habitat, species, DroughtTrt,DroughNet_plotID, plant_nr, nearest_DURIN_plotID)) |> 
+  left_join(leaf_area_PI, by = join_by(envelope_ID)) |> 
+  select(day, month, year, siteID, habitat, species, DroughtTrt, DroughNet_plotID, plant_nr, nearest_DURIN_plotID, envelope_ID, leaf_nr, wet_mass_g, starts_with("leaf_thickness"), dry_mass_g, scanned, leaves_count, leaf_area)
+
+#adding plant_id "LY_F_VV1"
+leaf_trait_data_join <- leaf_trait_data_join |> 
+  mutate(
+    # Définir AA
+    AA = case_when(
+      siteID == "Lygra" ~ "LY",
+      siteID == "Sogndal" ~ "SO",
+      siteID == "Senje" ~ "SE",
+      siteID == "Kautokeino" ~ "KA",
+      TRUE ~ NA_character_
+    ),
+    
+    # Définir B
+    B = case_when(
+      habitat == "Open" ~ "O",
+      habitat == "Forested" ~ "F",
+      TRUE ~ NA_character_
+    ),
+    
+    # Définir CC
+    CC = case_when(
+      species == "Vaccinium myrtillus" ~ "VM",
+      species == "Vaccinium vitis-idaea" ~ "VV",
+      TRUE ~ NA_character_
+    ),
+    
+    # Définir D
+    D = as.character(plant_nr),
+    
+    # Définir EE
+    EE = case_when(
+      siteID == "Lygra" ~ "LY",
+      siteID == "Sogndal" ~ "SO",
+      siteID == "Senje" ~ "SE",
+      siteID == "Kautokeino" ~ "KA",
+      TRUE ~ NA_character_
+    ),
+    
+    # Définir DN
+    DN = "DN",
+    
+    # Définir FF
+    FF = as.character(DroughNet_plotID),
+    
+    # Définir GG
+    GG = case_when(
+      species == "Vaccinium myrtillus" ~ "VM",
+      species == "Vaccinium vitis-idaea" ~ "VV",
+      TRUE ~ NA_character_
+    ),
+    
+    # Définir H
+    H = as.character(plant_nr),
+    
+    # Construire plant_id
+    plant_id = case_when(
+      !is.na(habitat) ~ paste0(AA, "_", B, "_", CC, D),
+      TRUE ~ paste0(EE, "_", DN, FF, "_", GG, H)
+    )
+  ) |> 
+  select(-AA, -B, -CC, -D, -EE, -DN, -FF, -GG, -H)
+
+plant_id_leaf_area <- leaf_trait_data_join |>
+  group_by(plant_id) |> 
+  summarise(mean_leaf_area = mean(leaf_area, na.rm = TRUE),
+            sd_leaf_area = sd(leaf_area, na.rm = TRUE)) |> 
+  ungroup() |> 
+  left_join(leaf_trait_data_join, by = "plant_id") |> 
+  distinct(plant_id, .keep_all = TRUE) |> 
+  select( plant_id, siteID, species, habitat, scanned, mean_leaf_area, sd_leaf_area) |>  #mean of the size for all the pictures for one plant 
+ mutate(species = case_when(
+      species == "Vaccinium myrtillus" ~ "VM",
+      species == "Vaccinium vitis-idaea" ~ "VV",
+      TRUE ~ NA_character_
+    ))
+
+#cleaning problems of scanned ID
+violating_envelope_IDs <- leaf_trait_data_join |> 
+  filter((scanned == "yes" & is.na(leaf_area)) | 
+         (scanned == "no" & !is.na(leaf_area))) |> 
+  select(envelope_ID, siteID, habitat, scanned, leaves_count, leaf_area) |> 
+  distinct()
+
+leaf_trait_data_join <-  leaf_trait_data_join |> 
+      mutate(leaf_thickness_mean_p = rowMeans(select(leaf_trait_data_join, starts_with("leaf_thickness")), na.rm = TRUE)) |> 
+  mutate(leaf_thickness_mean_p = apply(select(leaf_trait_data_join, starts_with("leaf_thickness")), 1, sd, na.rm = TRUE))
+
+plant_id_leaf_thickness <- leaf_trait_data_join |>
+  group_by(plant_id) |> 
+   summarise(mean_leaf_thickness = mean(leaf_thickness_mean_p, na.rm = TRUE),
+            sd_leaf_thickness = sd(leaf_thickness_mean_p, na.rm = TRUE)) |> 
+  ungroup() |> 
+  left_join(leaf_trait_data_join, by = "plant_id") |> 
+  distinct(plant_id, .keep_all = TRUE) |> 
+  select( plant_id, siteID, species, mean_leaf_thickness, sd_leaf_thickness) |>  #mean of the size for all the pictures for one plant 
+ mutate(species = case_when(
+      species == "Vaccinium myrtillus" ~ "VM",
+      species == "Vaccinium vitis-idaea" ~ "VV",
+      TRUE ~ NA_character_
+    ))
+
+plant_id_leaf_wetmass <- leaf_trait_data_join |>
+  group_by(plant_id) |> 
+   summarise(mean_leaf_wetmass = mean(wet_mass_g, na.rm = TRUE),
+            sd_leaf_wetmass = sd(wet_mass_g, na.rm = TRUE)) |> 
+  ungroup() |> 
+  left_join(leaf_trait_data_join, by = "plant_id") |> 
+  distinct(plant_id, .keep_all = TRUE) |> 
+  select( plant_id, siteID, species, mean_leaf_wetmass, sd_leaf_wetmass) |>  #mean of the size for all the pictures for one plant 
+ mutate(species = case_when(
+      species == "Vaccinium myrtillus" ~ "VM",
+      species == "Vaccinium vitis-idaea" ~ "VV",
+      TRUE ~ NA_character_
+    ))
+
+plant_id_data <- plant_id_density_mean |> 
+  left_join(plant_id_stomata_surface, by = join_by(plant_id, siteID, species)) |> 
+  left_join(plant_id_leaf_area, by = join_by(plant_id, siteID, species)) |> 
+  left_join(plant_id_leaf_thickness, by = join_by(plant_id, siteID, species)) |> 
+  left_join(plant_id_leaf_wetmass, by = join_by(plant_id, siteID, species))
+```
+
+filtering
+
+```{r}
+
+SP_data_picture_OF <-filter(SP_data_picture, habitat %in% c("Open", "Forested"))
+SP_data_picture_DN <-filter(SP_data_picture, !habitat %in% c("Open", "Forested"))
+SP_data_picture_LY_O<- SP_data_picture |> 
+  filter(siteID == "Lygra") |> 
+  filter(habitat != "Forested")
+```
+
+plotting
+
+```{r}
+
+
+base <- ggplot(SP_data_picture_OF, aes(x = species, y = stomatal_density_p))
+
+p_box <- base + geom_boxplot(aes(fill = species))
+p_box_2 <- base + geom_boxplot(aes(fill = siteID))
+p_vio <- base + geom_violin(aes(fill = species))
+p_vio_2 <- base + geom_violin(aes(fill = siteID))
+p_point <- base + geom_point(aes(colour = species))
+p_jit <- base + geom_jitter(aes(colour = species))
+library(ggforce)
+p_sina <- base + geom_sina(aes(colour = species))
+
+p_box
+p_box_2
+p_vio 
+p_vio_2
+p_point
+p_jit
+library(ggforce)
+p_sina
+
+
+#mutate(stomatal_conductance = rowMeans(select(SP_data,starts_with("stomatal_density")), na.rm = TRUE))
+
+```
+
+dez0
+
+```{r}
+f_grid_stomatal <-  ggplot(SP_data_picture_OF,aes(x = species, y = stomatal_density_p))+
+  geom_boxplot(aes(fill = habitat)) +
+  facet_grid(. ~ siteID)
+f_grid_stomatal
+
+#f_wrap <- facet_wrap()
+
+p_box2 <- SP_data_picture_OF|> 
+  ggplot(aes(x = species, y = stomatal_density_p, fill = habitat)) +
+  geom_boxplot(position = position_dodge(width = 0.75)) + # Spécifier la même position_dodge pour les boxplots
+  labs(x = "Species", y = "Stomatal Density Mean", fill = "Habitat")
+p_box2
+
+p_box3 <- SP_data_picture_OF|> 
+   ggplot(aes(x = species, y = mean_stomatal_area_um2_p, fill = habitat)) +
+  geom_boxplot(position = position_dodge(width = 0.75)) + # Spécifier la même position_dodge pour les boxplots
+  labs(x = "Species", y = "Mean Stomatal Area (um2)", fill = "Habitat")
+p_box3
+```
+
+mlde
+
+```{r}
+
+f_grid_stomatal_density <- ggplot(SP_data_picture_OF, aes(x = species, y = stomatal_density_p, fill = habitat)) +
+  geom_boxplot() +
+  geom_errorbar(aes(ymin = SP_data_picture_OF$stomatal_density_min, ymax = SP_data_picture_OF$stomatal_density_max), width = 0.2, position = position_dodge(width = 0.75)) +
+  facet_grid(. ~ siteID) +
+  labs(x = "Species", y = "Stomatal Density (stomata / mm²)")
+
+# Afficher le graphique
+print(f_grid_stomatal_density)
+
+f_grid_stomatal_area <- ggplot(SP_data_picture_OF, aes(x = species, y = mean_stomatal_area_um2_p, fill = habitat)) +
+  geom_boxplot() +
+  geom_errorbar(aes(ymin = SP_data_picture_OF$stomatal_area_min, ymax = SP_data_picture_OF$stomatal_area_max), width = 0.2, position = position_dodge(width = 0.75)) +
+  facet_grid(. ~ siteID) +
+  labs(x = "Species", y = "Stomatal area (µm²)") 
+
+# Afficher le graphique
+print(f_grid_stomatal_area)
+
+# Créer le graphique avec les points et les barres d'erreur
+f_grid_stomatal_tradeoff <- ggplot(SP_data_picture_OF, aes(x = mean_stomatal_area_um2_p, y = stomatal_density_p, color = species)) +
+  geom_point(aes(shape = species), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+ # geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
+  facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
+  labs(x = "Stomatal Area (µm²)", y = "Stomatal Density (stomata / mm²)")
+
+# Afficher le graphique
+print(f_grid_stomatal_tradeoff)
+
+
+```
+
+plot with conductance
+
+```{r}
+f_grid_stomatal_cond <-SP_data |> 
+  filter(!is.na(stomatal_conductance_mean_p)) |> 
+  filter(!is.na(habitat)) |>
+  ggplot(aes(x = mean_stomatal_density, y = stomatal_conductance_mean_p, fill = habitat)) +
+  geom_point(aes(shape = species), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+ # geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
+  facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
+  labs(x = "Stomatal Density", y = "Stomatal conductance")
+# Afficher le graphique
+print(f_grid_stomatal_cond)
+
+f_grid_stomatal_cond2 <-SP_data |> 
+  filter(!is.na(stomatal_conductance_mean_p)) |> 
+  filter(!is.na(habitat)) |>
+  ggplot(aes(x = mean_stomatal_area_um2, y = stomatal_conductance_mean_p, fill = habitat)) +
+  geom_point(aes(shape = species), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+  facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
+  labs(x = "Stomatal size", y = "Stomatal conductance")
+# Afficher le graphique
+print(f_grid_stomatal_cond2)
+
+f_grid_stomatal_cond3 <- SP_data |> 
+  filter(!is.na(stomatal_conductance_mean_p)) |>
+  filter(!is.na(habitat)) |>
+  ggplot(aes(x = species, y = stomatal_conductance_mean_p, fill = habitat)) +
+  geom_boxplot() +
+  geom_errorbar(aes(ymin = stomatal_conductance_min, ymax = stomatal_conductance_max), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
+  facet_grid(. ~ siteID) +
+  labs(x = "Species", y = "Stomatal conductance")
+
+print(f_grid_stomatal_cond3)
+```
+
+leaf area :
+
+```{r}
+# Créer le graphique avec les points et les barres d'erreur
+f_grid_leaf_area_tradeoff <- plant_id_data |> 
+  filter(!is.na(habitat)) |>
+  ggplot(aes(x = mean_stomatal_density, y = mean_leaf_area, color = species)) +
+  geom_point(aes(shape = species), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+ # geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
+  facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
+  labs(x = "Stomatal Density (stomata / mm²)", y = "plant leaf area (cm²)")
+
+# Afficher le graphique
+print(f_grid_leaf_area_tradeoff)
+```
+
+## Statistical analysis
+
+```{r}
+# Statistiques descriptives
+descriptive_stats <- SP_data_density  |> 
+  group_by(species, habitat, siteID)  |> 
+  summarise(
+    n = length(stomatal_density_p),
+    mean_densité = mean(stomatal_density_p, na.rm = TRUE),
+    sd_densité = sd(stomatal_density_p, na.rm = TRUE),
+    median_densité = median(stomatal_density_p, na.rm = TRUE)
+  )
+
+
+# Visualisation avec boxplot
+ggplot(SP_data_density, aes(x = species, y = stomatal_density_p, fill = habitat)) +
+  geom_boxplot() +
+  facet_wrap(~ siteID) +
+  theme_minimal() +
+  labs(title = "Densité stomatique par espèce, habitat et site")
+```
+
+Normality test
+
+```{r}
+# Test de normalité
+shapiro_results <- SP_data_density  |> 
+  group_by(species, habitat, siteID) |> 
+  summarise(
+    shapiro_p = shapiro.test(stomatal_density_p)$p.value
+  )
+
+print(shapiro_results)
+
+# Comparaison intra-spécifique par habitat pour chaque espèce avec Wilcoxon par paires
+for (species_i in unique(SP_data_picture_OF$species)) {
+  for (habitat_i in unique(SP_data_picture_OF$habitat)) {
+    subset_data <- SP_data_picture_OF %>% filter(species == species_i, habitat == habitat_i)
+    site_pairs <- combn(unique(subset_data$siteID), 2, simplify = FALSE)
+    for (pair in site_pairs) {
+      pair_data <- subset_data %>% filter(siteID %in% pair)
+      if (shapiro.test(pair_data$stomatal_density_p)$p.value > 0.05) {
+        t_test <- t.test(stomatal_density_p ~ siteID, data = pair_data)
+        print(paste("Test t pour", species_i, "dans", habitat_i, "entre sites", pair[1], "et", pair[2], ": p-value =", t_test$p.value))
+      } else {
+        wilcox_test <- wilcox.test(stomatal_density_p ~ siteID, data = pair_data)
+        print(paste("Test de Wilcoxon pour", species_i, "dans", habitat_i, "entre sites", pair[1], "et", pair[2], ": p-value =", wilcox_test$p.value))
+      }
+    }
+  }
+}
+
+
+# Comparaison intra-spécifique par habitat pour chaque espèce avec Kruskal-Wallis
+for (species_i in unique(SP_data_picture_OF$species)) {
+  for (site_i in unique(SP_data_picture_OF$siteID)) {
+    subset_data <- SP_data_picture_OF|> 
+      filter(species == species_i, siteID == site_i)
+    kruskal_test <- kruskal.test(stomatal_density_p ~ habitat, data = subset_data)
+    print(paste("Test de Kruskal-Wallis pour", species_i, "dans", site_i, ": p-value =", kruskal_test$p.value))
+  }
+}
+
+```
+
+```{r}
+library(multcomp)
+
+# Conversion des colonnes en facteurs
+SP_data_picture_OF$species <- as.factor(SP_data_picture_OF$species)
+SP_data_picture_OF$habitat <- as.factor(SP_data_picture_OF$habitat)
+SP_data_picture_OF$siteID <- as.factor(SP_data_picture_OF$siteID)
+
+
+# ANOVA pour comparaison extra-spécifique
+anova_model <- aov(stomatal_density_p ~ species * habitat * siteID, data = SP_data_picture_OF)
+anova_summary <- summary(anova_model)
+
+# Vérification si ANOVA est significative pour l'effet principal des espèces
+if (anova_summary[[1]]$`Pr(>F)`[1] < 0.05) {
+  posthoc <- glht(anova_model, linfct = mcp(species = "Tukey"))
+  print(summary(posthoc))
+}
+
+```
+
+comparaison en enlevant les espèces comme facteur
+
+```{r}
+# Charger les librairies nécessaires
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(multcomp)
+
+# Conversion des colonnes en facteurs
+SP_data_picture_OF$species <- as.factor(SP_data_picture_OF$species)
+SP_data_picture_OF$habitat <- as.factor(SP_data_picture_OF$habitat)
+SP_data_picture_OF$siteID <- as.factor(SP_data_picture_OF$siteID)
+
+# Séparation des données par espèce
+species_list <- unique(SP_data_picture_OF$species)
+
+for (species in species_list) {
+  cat("Analyse pour l'espèce :", species, "\n")
+  
+  # Filtrer les données pour l'espèce courante
+  species_data <- SP_data_picture_OF %>% filter(species == !!species)
+  
+  # Statistiques descriptives
+  descriptive_stats <- species_data %>%
+    group_by(habitat, siteID) %>%
+    summarise(
+      mean_density = mean(stomatal_density_p, na.rm = TRUE),
+      sd_density = sd(stomatal_density_p, na.rm = TRUE),
+      median_density = median(stomatal_density_p, na.rm = TRUE)
+    )
+  
+  print(descriptive_stats)
+  
+  # Visualisation avec boxplot
+  ggplot(species_data, aes(x = habitat, y = stomatal_density_p, fill = siteID)) +
+    geom_boxplot() +
+    theme_minimal() +
+    labs(title = paste("Densité stomatique pour l'espèce", species))
+  
+  # ANOVA pour évaluer l'effet de l'habitat et du site
+  anova_model <- aov(stomatal_density_p ~ habitat * siteID, data = species_data)
+  anova_summary <- summary(anova_model)
+  print(anova_summary)
+  
+  # Tests post-hoc si l'ANOVA est significative
+  if (anova_summary[[1]]$`Pr(>F)`[1] < 0.05 | anova_summary[[1]]$`Pr(>F)`[2] < 0.05 | anova_summary[[1]]$`Pr(>F)`[3] < 0.05) {
+    posthoc <- glht(anova_model, linfct = mcp(habitat = "Tukey"))
+    print(summary(posthoc))
+    
+    posthoc_site <- glht(anova_model, linfct = mcp(siteID = "Tukey"))
+    print(summary(posthoc_site))
+  }
+}
+
+
+```
+
+glm
+
+```{r}
+
+# Charger les librairies nécessaires
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(multcomp)
+
+# Conversion des colonnes en facteurs
+SP_data_picture_OF$species <- as.factor(SP_data_picture_OF$species)
+SP_data_picture_OF$habitat <- as.factor(SP_data_picture_OF$habitat)
+SP_data_picture_OF$siteID <- as.factor(SP_data_picture_OF$siteID)
+
+# Fonction pour analyser chaque espèce
+analyze_species <- function(data, species_name) {
+  # Filtrer les données pour l'espèce
+  species_data <- filter(data, species == species_name)
+  
+  # Créer une variable d'interaction
+  species_data$habitat_siteID <- interaction(species_data$habitat, species_data$siteID)
+  
+  # Modèle linéaire généralisé sans l'effet de l'espèce
+  glm_model <- glm(stomatal_density_p ~ habitat * siteID, data = species_data)
+  glm_summary <- summary(glm_model)
+  print(paste("Résumé du modèle GLM pour l'espèce:", species_name))
+  print(glm_summary)
+  
+  # Visualisation des interactions
+  interaction_plot <- ggplot(species_data, aes(x = habitat, y = stomatal_density_p, color = siteID)) +
+    geom_point(position = position_jitter(width = 0.2, height = 0)) +
+    facet_wrap(~ siteID) +
+    theme_minimal() +
+    labs(title = paste("Interactions entre habitat et siteID sur la Densité stomatique pour l'espèce", species_name))
+  print(interaction_plot)
+  
+  # ANOVA pour évaluer l'effet de l'habitat et du site sans inclure l'effet de l'espèce
+  anova_model <- aov(stomatal_density_p ~ habitat * siteID, data = species_data)
+  anova_summary <- summary(anova_model)
+  print(paste("Résumé de l'ANOVA pour l'espèce:", species_name))
+  print(anova_summary)
+  
+  # Tests post-hoc si l'ANOVA est significative
+  if (anova_summary[[1]]$`Pr(>F)`[1] < 0.05 | anova_summary[[1]]$`Pr(>F)`[2] < 0.05 | anova_summary[[1]]$`Pr(>F)`[3] < 0.05) {
+    posthoc_habitat <- glht(anova_model, linfct = mcp(habitat = "Tukey"))
+    print(paste("Comparaisons post-hoc des habitats pour l'espèce:", species_name))
+    print(summary(posthoc_habitat))
+    
+    posthoc_site <- glht(anova_model, linfct = mcp(siteID = "Tukey"))
+    print(paste("Comparaisons post-hoc des sites pour l'espèce:", species_name))
+    print(summary(posthoc_site))
+    
+
+  }
+}
+
+# Appliquer la fonction pour chaque espèce
+unique_species <- unique(SP_data_picture_OF$species)
+for (species_name in unique_species) {
+  analyze_species(SP_data_picture_OF, species_name)
+}
+
+```
+
+```{r}
+
+
+SP_data_picture_OF2 <- subset(SP_data_picture_OF, habitat == "Forested")
+
+
+# Réaliser le test ANOVA
+anova_result <- anova(modele_open)
+print(anova_result)
+
+# Conversion des colonnes en facteurs
+SP_data_picture_OF2$species <- as.factor(SP_data_picture_OF2$species)
+SP_data_picture_OF2$habitat <- as.factor(SP_data_picture_OF2$habitat)
+SP_data_picture_OF2$siteID <- as.factor(SP_data_picture_OF2$siteID)
+
+# Séparation des données par espèce
+species_list <- unique(SP_data_picture_OF2$species)
+
+for (species in species_list) {
+  cat("Analyse pour l'espèce :", species, "\n")
+  
+  # Filtrer les données pour l'espèce courante
+  species_data <- SP_data_picture_OF2 %>% filter(species == !!species)
+
+  
+  # ANOVA pour évaluer l'effet de l'habitat et du site
+  anova_model <- aov(stomatal_density_p ~ siteID, data = species_data)
+  anova_summary <- summary(anova_model)
+  print(anova_summary)
+  
+  # Tests post-hoc si l'ANOVA est significative
+  if (anova_summary[[1]]$`Pr(>F)`[1] < 0.05 | anova_summary[[1]]$`Pr(>F)`[2] < 0.05 | anova_summary[[1]]$`Pr(>F)`[3] < 0.05) {
+    posthoc_site <- glht(anova_model, linfct = mcp(siteID = "Tukey"))
+    print(summary(posthoc_site))
+  }
+}
+
+```
