@@ -150,29 +150,7 @@ tms.info <- mc_info_clean(tms)
 
 Cleaning data
 
-```{r}
-  
-tms.cleaning.soil <- tms |> 
-  mc_filter(sensors = "TMS_moist") |> 
-  mc_reshape_long()
-  
-tms.cleaning.temp.air <- tms |> 
-  mc_filter(sensors = c("TMS_moist","TMS_T1"), reverse = TRUE) |> 
-    mc_reshape_long() |> 
-  filter(value <= -30 | value >= 50) |> 
-  select(serial_number, sensor_name, value) |> 
-  group_by(serial_number) |> 
-  summarise(number = n())
-  
-tms.cleaning.temp.soil <- tms |> 
-  mc_filter(sensors = "TMS_T1") |> 
-    mc_reshape_long() |> 
-  filter(value <= -10 | value >= 40) |> 
-  select(serial_number, sensor_name, value) |> 
-  group_by(serial_number) |> 
-  summarise(number = n())
-  
-
+```         
 ```
 
 cropping to start reading at date_in (not efficient but works)
@@ -483,7 +461,17 @@ tms.all.calc <- mc_calc_fdd(tms.all.calc, sensor = "TMS_T3")
 tms.all.calc <- mc_calc_snow(tms.all.calc, sensor = "TMS_T2")
 
 ## summary data.frame of snow estimation
-tms.snow <- mc_calc_snow_agg(tms.all.calc)
+tms.snow <- tms.all.calc |> 
+  mc_calc_snow_agg() 
+tms.snow$locality_id = as.numeric(tms.snow$locality_id)
+tms.snow <- active_metadata |> 
+  select("locality_id" = loggerID , "siteID" = site,"habitat" = land_type) |> 
+  filter(habitat %in% c("Open", "Forested")) |> 
+  left_join(tms.snow) |> 
+  group_by(siteID, habitat) |> 
+  summarise(mean_snow_days = mean(snow_days),
+            first_day = mean.Date(first_day, na.rm = TRUE),
+            last_day = mean.Date(last_day, na.rm = TRUE))
  
 temp_env_all  <-tms |> 
   mc_env_temp(period = "week", min_coverage = 0.9) |> 
