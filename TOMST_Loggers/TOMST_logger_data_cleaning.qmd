@@ -18,18 +18,18 @@ Installing all the packages required to run the code
 
 ```{r install packages}
 
-install.packages("tidyverse")
-install.packages("lubridate")
+#install.packages("tidyverse")
+#install.packages("lubridate")
 #install.packages("dataDownloader")
-install.packages("purrrlyr")
-install.packages("readxl")
-install.packages("fs")
-install.packages("purrr")
-install.packages("readr")
-install.packages("ggplot2")
-install.packages("lme4")
-install.packages("stargazer")
-install.packages("myClim")
+#install.packages("purrrlyr")
+#install.packages("readxl")
+#install.packages("fs")
+#install.packages("purrr")
+#install.packages("readr")
+#install.packages("ggplot2")
+#install.packages("lme4")
+#install.packages("stargazer")
+#install.packages("myClim")
 ```
 
 Load all the packages needed
@@ -134,7 +134,7 @@ tms.info2 <- mc_info_clean(tms)
 
 # Start and end are list 
 #start <-  as.POSIXct(as.Date(active_metadata$date_in, format = "%d/%m/%Y"), tz = "UTC")
-start_t <- as.POSIXct(as.Date("01/04/2023", format = "%d/%m/%Y"), tz = "UTC")
+start_t <- as.POSIXct(as.Date("01/08/2023", format = "%d/%m/%Y"), tz = "UTC")
 # we choose this date to have the same data for all TMS loggers
 end_t <- as.POSIXct(as.Date("15/06/2024", format = "%d/%m/%Y"), tz = "UTC")
 #end <- as.POSIXct(as.Date(active_metadata$date_collect, format = "%d/%m/%Y"), tz = "UTC")
@@ -474,7 +474,7 @@ tms.snow <- active_metadata |>
             last_day = mean.Date(last_day, na.rm = TRUE))
  
 temp_env_all  <-tms |> 
-  mc_env_temp(period = "week", min_coverage = 0.9) |> 
+  mc_env_temp(period = "day", min_coverage = 0.9) |> 
   filter(value >= -30 & value <= 50)
 
 moist_env_all <- mc_env_moist(tms.all.calc, period = "day", min_coverage = 0.9)
@@ -592,7 +592,7 @@ f_line_macro_1 <-ggplot(moist.mean.all, aes(x = datetime, y = mean.moist, color 
   geom_line()+
   labs(#title = "Average Soil Moisture Over Time",
        x = "Date",
-       y = "Mean Soil Volumetric Water Content",
+       y = "Weekly Average Soil Volumetric Water Content",
        color = "Site")
 print(f_line_macro_1)
 
@@ -600,7 +600,7 @@ f_line_macro_2 <-ggplot(temp.mean.all, aes(x = datetime, y = mean.temp.air, colo
   geom_line()+
   labs(#title = "Average air temperature Over Time",
        x = "Date",
-       y = "Mean Air (15cm) Temperature (°C)",
+       y = "Weekly Average Air (15cm) Temperature (°C)",
        color = "Site")
 print(f_line_macro_2)
 
@@ -611,7 +611,7 @@ print(f_line_macro_2)
   facet_wrap(~ site) +
   labs(#title = "Average Soil Moisture Over Time",
        x = "Date",
-       y = "Mean Soil Solumetric Water Sontent",
+       y = "Weekly Average Soil Solumetric Water Sontent",
        color = "Habitat")+
    theme(legend.position = "bottom")
 print(f_line_micro_1)
@@ -621,7 +621,7 @@ f_line_micro_2 <-ggplot(temp.mean.all.hab, aes(x = datetime, y = mean.temp.air.h
   facet_wrap(~ site) +
   labs(#title = "Average air temperature Over Time",
        x = "Date",
-       y = "Mean Air (15cm) Temperature (°C)",
+       y = "Weekly Average Air (15cm) Temperature (°C)",
        color = "Habitat")+
    theme(legend.position = "bottom")
 print(f_line_micro_2)
@@ -636,17 +636,17 @@ snow.mean.all <- active_metadata |>
   select(loggerID, site, "habitat" = land_type) |> 
   left_join(snow.mean.all) |> 
   filter(habitat %in% c("Open", "Forested")) |> 
-  group_by(site, habitat, datetime) |> 
+  group_by(site, datetime) |> 
   summarise(snow.hab = mean(snow, na.rm = TRUE)) |> 
-  ungroup()
+  ungroup() 
 
-f_line_micro_3 <-ggplot(snow.mean.all, aes(x = datetime, y = snow.hab, color = habitat)) +
+
+f_line_micro_3 <-ggplot(snow.mean.all, aes(x = datetime, y = snow.hab))+
   geom_line() +
   facet_wrap(~ site) +
   labs(#title = "Average air temperature Over Time",
        x = "Date",
-       y = "snow cover",
-       color = "Habitat")
+       y = "snow cover")
 print(f_line_micro_3)
 
 
@@ -659,12 +659,18 @@ GDD5.mean.all <- active_metadata |>
   select(loggerID, site, "habitat" = land_type) |> 
   left_join(GDD5.mean.all) |> 
   filter(habitat %in% c("Open", "Forested")) |> 
-  group_by(site, habitat, datetime) |> 
+  group_by(site, datetime) |> 
   summarise(GDD5.hab = mean(GDD5_mean, na.rm = TRUE)) |> 
-  ungroup() 
+  ungroup() |> 
+  mutate(GDD5_day = ifelse(GDD5.hab > 0, 1, 0))
+
+GDD5.month.all <- GDD5.mean.all |> 
+  mutate(month_year = format(datetime, "%Y-%m")) |> 
+  group_by(site, month_year) |> 
+  summarise(GDD5_day_month = sum(GDD5_day, na.rm = TRUE))
 
 FDD0.mean.all <- temp_env_all |> 
-  filter(sensor_name == "T.air_2_cm.FDD0") |> 
+  filter(sensor_name == "T.soil_8_cm.FDD0") |> 
     select("loggerID" = locality_id, sensor_name, datetime, "FDD0_mean" = value) 
 FDD0.mean.all$loggerID = as.numeric(FDD0.mean.all$loggerID)
 
@@ -672,10 +678,39 @@ FDD0.mean.all <- active_metadata |>
   select(loggerID, site, "habitat" = land_type) |> 
   left_join(FDD0.mean.all) |> 
   filter(habitat %in% c("Open", "Forested")) |> 
-  group_by(site, habitat, datetime) |> 
+  group_by(site, datetime) |> 
   summarise(FDD0.hab = mean(FDD0_mean, na.rm = TRUE)) |> 
-  ungroup() 
+  ungroup() |> 
+  mutate(FDD0_day = ifelse(FDD0.hab > 0, 1, 0)) 
 
+FDD0.month.all <- FDD0.mean.all |> 
+  mutate(month_year = format(datetime, "%Y-%m")) |> 
+  group_by(site, month_year) |> 
+  summarise(FDD0_day_month = sum(FDD0_day, na.rm = TRUE))
+
+DD.mean.all <- GDD5.mean.all |> 
+  left_join(FDD0.mean.all, by = join_by(site, datetime)) |> 
+  mutate(GDD5_day = ifelse(FDD0_day == 0, 1, 0)) |> 
+  mutate(month_year = format(datetime, "%Y-%m")) |> 
+  group_by(site, month_year) |> 
+  summarise(FDD0_day_month = sum(FDD0_day, na.rm = TRUE),
+            GDD5_day_month = sum(GDD5_day, na.rm = TRUE))
+
+snow.month.all <- snow.mean.all |> 
+  mutate(month_year_day = format(datetime, "%Y-%m-%d")) |> 
+  group_by(site, month_year_day) |> 
+  summarise(snow.day = sum(snow.hab, na.rm = TRUE)) |> 
+  ungroup() |> 
+  mutate(snow.day = ifelse(snow.day < 0.5, 0, 1)) |> 
+  mutate(month_year = as.character(substr(month_year_day, 1, 7))) |> 
+  group_by(site, month_year) |> 
+  summarise(snow.day.month = sum(snow.day, na.rm = TRUE)) |> 
+  ungroup()
+
+snow.year <- snow.month.all |> 
+  group_by(site) |> 
+  summarise(snow.year = sum(snow.day.month, na.rm = TRUE))
+ 
 f_line_micro_4 <- ggplot() +
   geom_line(data = GDD5.mean.all, aes(x = datetime, y = GDD5.hab, color = "Growing Degree Day (>5°C)")) +
   geom_line(data = FDD0.mean.all, aes(x = datetime, y = FDD0.hab, color = "Freezing Degree Day (<0°C)")) +
@@ -690,11 +725,34 @@ f_line_micro_4 <- ggplot() +
   scale_color_manual(
     values = c("Growing Degree Day (>5°C)" = "green", "Freezing Degree Day (<0°C)" = "blue")
   )
-
-
 print(f_line_micro_4)
 
 
+f_histo_micro <- ggplot() +
+   geom_bar(data = DD.mean.all, 
+           aes(x = month_year, y = FDD0_day_month, fill = "Freezing Day (<0°C)"),
+           stat = "identity") +
+  geom_bar(data = DD.mean.all, 
+           aes(x = month_year, y = GDD5_day_month, fill = "Growing Day (>5°C)"),
+           stat = "identity") +
+ 
+  facet_wrap(~ site) +
+  labs(
+    x = "Date",
+    y = "Number of day",
+    fill = " Day Type"
+  ) +
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    position = "dodge"
+  )+
+  scale_fill_manual(
+    values = c("Growing Day (>5°C)" = "green", "Freezing Day (<0°C)" = "blue")
+  ) 
+
+
+print(f_histo_micro)
 
 # Add a type column to both dataframes
 GDD5.mean.all$type <- "Growing Degree Day (>5°C)"

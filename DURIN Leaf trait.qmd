@@ -1,0 +1,73 @@
+---
+title: "DURIN Leaf trait"
+format: html
+editor: visual
+---
+
+## Import and merge leaf traits data
+
+```{r}
+
+library(tidyverse)
+library(readxl)
+library(readr)
+library(tidyr)
+library(dplyr)
+library(googlesheets4)
+library(imager)
+```
+
+Importing from google sheet the data
+
+```{r}
+# Authentification 
+gs4_auth()
+
+
+
+sheet_leaf_url <- "https://docs.google.com/spreadsheets/d/1EqU78hhb4Wz3RC8UMinqQU4T99QZ7FaDTXUW8krT_OU/edit?gid=0#gid=0"
+
+
+leaf_trait_data <-  suppressWarnings(read_sheet(sheet_leaf_url, sheet = "Data", 
+                              col_types = "cdcdccccccccddcccccdddcdddddddddccccDcccc"))
+
+```
+
+Importing the result of leaf area calculation
+
+```{r}
+leaf_area_PI_Rey <- read.csv("DURIN_Calculated_Leaf_Area_2024_07_19.csv")
+leaf_area_PI_Grogu <- read.csv("DURIN_Calculated_Leaf_Area_2024_07_19_grogu.csv")
+
+leaf_area_PI <- rbind(leaf_area_PI_Rey,leaf_area_PI_Grogu)
+rm(leaf_area_PI_Grogu, leaf_area_PI_Rey)
+
+#edit wrong ID
+
+leaf_area_PI <- leaf_area_PI |> 
+  arrange(ID)
+
+new_ids <- c("IBW3196", "ITA6153", "GQX9461", "GRB7361", "IOP353", "GRI3259", "GTT1344")
+
+# Modifier les IDs des 7 premières lignes
+leaf_area_PI$ID[1:7] <- new_ids
+
+leaf_area_PI <- leaf_area_PI |> 
+  select("envelope_ID" = ID, "leaves_count" = n, leaf_area)
+
+
+leaf_trait_data <-  leaf_trait_data |> 
+  mutate(across(where(is.character), ~replace(., . == "Not Applicable", NA)))
+leaf_trait_data$plant_nr <- as.double(leaf_trait_data$plant_nr)
+
+leaf_trait_data <- leaf_trait_data |> 
+  left_join(leaf_area_PI, by = "envelope_ID")
+```
+
+Leaf check
+
+```{r}
+scan_error <- leaf_trait_data |> 
+  filter(bulk_nr_leaves != leaves_count)
+
+```

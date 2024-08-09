@@ -115,15 +115,18 @@ tms <- mc_read_data(files_table = path_data,
                       silent = TRUE, clean = TRUE)
 tms <- mc_join(tms)
 
+tms_info <- mc_info_clean(tms)
+tms_info$start_date = tms_info$end_date %m-% months(2)
+#tms_info$start_date = tms_info$end_date %m-% months(12)
+
 # Start and end are list 
 #start <-  as.POSIXct(as.Date(active_metadata$date_in, format = "%d/%m/%Y"), tz = "UTC")
-start_t <- as.POSIXct(as.Date("01/05/2024", format = "%d/%m/%Y"), tz = "UTC")
+start_t <- tms_info$start_date
 # we choose this date to have the same data for all TMS loggers
-end_t <- as.POSIXct(as.Date("30/06/2024", format = "%d/%m/%Y"), tz = "UTC")
-#end <- as.POSIXct(as.Date(active_metadata$date_collect, format = "%d/%m/%Y"), tz = "UTC")
+
 localities = as.vector(names(tms$localities))
 
-tms <- mc_prep_crop(tms, start = start_t, end = end_t, localities)
+tms <- mc_prep_crop(tms, start = start_t, end = NULL, localities)
 tms.info <- mc_info_clean(tms)
 
 tms.all.calc <- mc_calc_vwc(tms, soiltype = "universal") #reseach on soiltype and TOMST VERSION
@@ -232,7 +235,9 @@ Calculation of the stomatal traits
 # Loading annotations 
 #annotations <- fromJSON("D:/Utilisateurs/Touriere/Téléchargements/DURIN_SP_area.v10i.coco-segmentation/train/_annotations.coco.json")
 
-annotations <- fromJSON("C:/Users/Touriere/Desktop/GEN/4A/SIRD/Data/Stomatal_peels/DURIN_SP_area.v17i.coco/_annotations.coco.json")
+#annotations <- fromJSON("C:/Users/Touriere/Desktop/GEN/4A/SIRD/Data/Stomatal_peels/DURIN_SP_area.v17i.coco/_annotations.coco.json")
+
+annotations <- fromJSON("C:/Users/Touriere/Desktop/GEN/4A/SIRD/Data/Stomatal_peels/DURIN_SP_area_relabel.v2i.coco/_annotations.coco.json")
 
 annotations_df <- as.data.frame(annotations$annotations)
 images_df <- as.data.frame(annotations$images)
@@ -301,6 +306,15 @@ SP_data_photo_id <- SP_data|>
   rbind(SP_data_photo_id)
 }
 }
+
+#filtering
+picture_delete = c("LY_F_VV1_S1_P3", "LY_DN_3.3_VV1_S2_P2", "SE_F_VV3_S3_P2", "SO_O_VV3_S1_P1", "LY_F_VV3_S2_P1", "LY_F_VV3_S2_P2", "LY_F_VV3_S3_P1", "LY_O_VV1_S2_P1", "LY_O_VV1_S2_P3", "LY_O_VV2_S1_P1", "LY_O_VV2_S1_P2", "LY_O_VV2_S1_P3", "LY_O_VV2_S3_P2", "LY_O_VV3_S1_P1", "LY_O_VV3_S1_P2", "LY_O_VV3_S2_P1", "LY_O_VV3_S2_P2", "LY_F_VV3_S2_P1", "LY_F_VV3_S2_P3", "LY_F_VM1_S1_P1", "LY_F_VM1_S3_P3")
+
+#cleaning
+SP_data_photo_id <- SP_data_photo_id |> 
+  filter(!(photo_id %in% picture_delete))
+
+
 
   #calculation of the densities
 SP_data_density <- optique_info|>
@@ -440,19 +454,20 @@ group_by(species, siteID, habitat) |>
 
 SP_data_density <- SP_data_density |> 
   left_join(stomatal_errorbar, by = join_by(siteID, species, habitat)) |>
-  mutate(stomatal_density_min = mean_stomatal_density - sd_stomatal_density,
+  mutate(stomatal_density_mean = mean_stomatal_density,
+         stomatal_density_min = mean_stomatal_density - sd_stomatal_density,
          stomatal_density_max = mean_stomatal_density + sd_stomatal_density) |> 
-  select(-mean_stomatal_density, -sd_stomatal_density, -mean_stomatal_area, -sd_stomatal_area)
+  select(-sd_stomatal_density,  -sd_stomatal_area)
 
 SP_data_area <- stomata_surface |> 
   left_join(stomatal_errorbar, by = join_by(siteID, species, habitat)) |>
   mutate(stomatal_area_min = mean_stomatal_area - sd_stomatal_area,
          stomatal_area_max = mean_stomatal_area + sd_stomatal_area) |> 
-  select(-mean_stomatal_density, -sd_stomatal_density, -mean_stomatal_area, -sd_stomatal_area)
+  select(-sd_stomatal_density, -sd_stomatal_area)
 
 
 SP_data_picture <- SP_data_density |>
-  left_join(SP_data_area, by = join_by(plant_id, siteID, habitat, photo_id, species))
+  left_join(SP_data_area)
 ```
 
 Conductance analysis
@@ -667,17 +682,25 @@ plant_id_leaf_wetmass <- leaf_trait_data_join |>
       TRUE ~ NA_character_
     ))
 
+plant_id_height <- SP_data |>
+  mutate(plant_mean_height = rowMeans(select(SP_data,starts_with("plant_height")), na.rm = TRUE)) |> 
+  group_by(plant_id) |> 
+  ungroup() |> 
+  select( plant_id, siteID, species, plant_mean_height)  #mean of the size for all the pictures for one plant 
+
+
 plant_id_data <- plant_id_density_mean |> 
   left_join(plant_id_stomata_surface, by = join_by(plant_id, siteID, species)) |> 
   left_join(plant_id_leaf_area, by = join_by(plant_id, siteID, species)) |> 
   left_join(plant_id_leaf_thickness, by = join_by(plant_id, siteID, species)) |> 
-  left_join(plant_id_leaf_wetmass, by = join_by(plant_id, siteID, species))
+  left_join(plant_id_leaf_wetmass, by = join_by(plant_id, siteID, species)) |> 
+  left_join(plant_id_height, by = join_by(plant_id, siteID, species))
 ```
 
 Environment cleaning :
 
 ```{r}
-rm(list = setdiff(ls(), c("PV_data", "SP_data", "cond_data","leaf_trait_data", "cond_data", "cond_data_r", "filtered_data", "habitat_density_mean", "leaf_id_density_mean", "leaf_id_density_mean_clean", "leaf_trait_data_join", "plant_id_data", "sp_data", "SP_data_photo_id", "SP_data_picture", "stomatal_conductance_mean", "stomatal_errorbar", "violating_envelope_IDs", "TOMST_data", "SP_data_density")))
+rm(list = setdiff(ls(), c("PV_data", "SP_data", "cond_data","leaf_trait_data", "cond_data", "cond_data_r", "filtered_data", "habitat_density_mean", "habitat_stomata_surface", "leaf_id_density_mean", "leaf_id_density_mean_clean", "leaf_trait_data_join", "plant_id_data", "sp_data", "SP_data_photo_id", "SP_data_picture", "stomatal_conductance_mean", "stomatal_errorbar", "violating_envelope_IDs", "TOMST_data", "SP_data_density")))
 
 ```
 
@@ -686,8 +709,8 @@ filtering
 ```{r}
 plant_id_data <- plant_id_data |> 
   select(plant_id, siteID, habitat, mean_stomatal_density, sd_stomatal_density, mean_stomatal_area_um2, "sd_stomatal_area_um2" = sd_area_um2, mean_leaf_area, sd_leaf_area, mean_leaf_thickness, sd_leaf_thickness,
-                   mean_leaf_wetmass, sd_leaf_wetmass) |> 
-  left_join(TOMST_data, by = join_by(plant_id, siteID, habitat)) |>
+                   mean_leaf_wetmass, sd_leaf_wetmass, plant_mean_height) |> 
+  left_join(select(TOMST_data, -siteID, -habitat), by = join_by(plant_id)) |>
   left_join(select(SP_data,
             plant_id, species, stomatal_conductance_mean_p, stomatal_conductance_min, stomatal_conductance_max),
             by = join_by(plant_id))
@@ -705,28 +728,83 @@ SP_data_picture_LY_O<- SP_data_picture |>
   filter(siteID == "Lygra") |> 
   filter(habitat != "Forested")
 
-picture_delete = c("LY_F_VV1_S3_P1", "LY_DN_3.3_VV1_S2_P2", "SE_F_VV3_S3_P2", "SO_O_VV3_S1_P1", "LY_F_VV3_S2_P1",
-                   "LY_F_VV3_S3_P1", "LY_O_VV3_S2_P1", "LY_O_VV3_S2_P2", "LY_O_VV3_S1_P1")
 
-#cleaning
-SP_data_picture_OF <- SP_data_picture_OF |> 
-  filter(!(photo_id %in% picture_delete))
 ```
 
 plotting
 
 ```{r}
+Sd_VM <- SP_data_picture_OF |> 
+  filter(species == "VM") |> 
+  summarise(Sd_mean = mean(stomatal_density_p),
+            Sd_sd = sd(stomatal_density_p, na.rm = TRUE),
+            Sa_mean = mean(mean_stomatal_area_um2_p),
+            Sa_sd = sd(mean_stomatal_area_um2_p, na.rm = TRUE)) |> 
+  mutate(Sd_min = Sd_mean - Sd_sd, Sd_max = Sd_mean + Sd_sd,
+         Sa_min = Sa_mean - Sa_sd, Sa_max = Sa_mean + Sa_sd) |> 
+  mutate(species = "VM")
+
+Sd_VV <- SP_data_picture_OF |> 
+  filter(species == "VV") |> 
+  summarise(Sd_mean = mean(stomatal_density_p),
+            Sd_sd = sd(stomatal_density_p, na.rm = TRUE),
+            Sa_mean = mean(mean_stomatal_area_um2_p),
+            Sa_sd = sd(mean_stomatal_area_um2_p, na.rm = TRUE)) |> 
+  mutate(Sd_min = Sd_mean - Sd_sd, Sd_max = Sd_mean + Sd_sd,
+         Sa_min = Sa_mean - Sa_sd, Sa_max = Sa_mean + Sa_sd) |> 
+  mutate(species = "VV")
+
+fig_save <- "C:/Users/Touriere/Desktop/GEN/4A/SIRD/Rapport/Images/R"
+  
 
 
-base <- ggplot(SP_data_picture_OF, aes(x = species, y = stomatal_density_p))
+base <- SP_data_picture_OF |> 
+  left_join(rbind(Sd_VM, Sd_VV)) |> 
+  ggplot(aes(x = species, y = stomatal_density_p))
 
 p_box <- base + geom_boxplot(aes(fill = species))
 p_box_2 <- base + geom_boxplot(aes(fill = siteID))
 p_vio <- base + geom_violin(aes(fill = species))
 p_vio_2 <- base + geom_violin(aes(fill = siteID))
 p_point <- base + geom_point(aes(colour = species))
-p_jit <- base + geom_jitter(aes(colour = species))
+
+
+p_jit <- SP_data_picture_OF |> 
+  left_join(rbind(Sd_VM, Sd_VV)) |> 
+  ggplot(aes(x = species, y = stomatal_density_p))+
+         geom_jitter(aes(colour = species), show.legend = FALSE)+
+         geom_errorbar(aes(ymin = Sd_min, ymax = Sd_max, width = 0.2)) +
+         geom_point(aes(x = species, y = Sd_mean), size = 2)+ 
+         labs(x = "Species", y = "Stomatal Density (stomata / mm²)")+
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 12)
+  ) 
+
+p_jit2 <- SP_data_picture_OF |> 
+  left_join(rbind(Sd_VM, Sd_VV)) |> 
+  ggplot(aes(x = species, y = mean_stomatal_area_um2_p))+
+         geom_jitter(aes(colour = species), show.legend = FALSE)+
+         geom_errorbar(aes(ymin = Sa_min, ymax = Sa_max, width = 0.2)) +
+         geom_point(aes(x = species, y = Sa_mean), size = 2)+ 
+         labs(x = "Species", y = "Mean Stomata Area (µm²)")+
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 12)
+  ) 
+         
 library(ggforce)
+library(cowplot)
+library(ggpubr)
+library(grid)
 p_sina <- base + geom_sina(aes(colour = species))
 
 p_box
@@ -735,10 +813,24 @@ p_vio
 p_vio_2
 p_point
 p_jit
+p_jit2 
 p_sina
 
 
-#mutate(stomatal_conductance = rowMeans(select(SP_data,starts_with("stomatal_density")), na.rm = TRUE))
+
+p_jit_join <- ggarrange(
+  p_jit, p_jit2,
+  labels = c("a)", "b)"),
+  ncol = 2,
+  common.legend = TRUE,
+  font.label = list(size = 17, face = "bold")
+) 
+
+p_jit_join
+
+# Enregistrez le graphique avec ggsave()
+ggsave(filename = paste0(fig_save, "/species_comp.png"), plot = p_jit_join, width = 10, height = 6, units = "in", dpi = 300)
+
 
 ```
 
@@ -746,14 +838,103 @@ mlde
 
 ```{r}
 
-f_grid_stomatal_density <- ggplot(SP_data_picture_OF, aes(x = species, y = stomatal_density_p, fill = habitat)) +
-  geom_boxplot() +
-  geom_errorbar(aes(ymin = SP_data_picture_OF$stomatal_density_min, ymax = SP_data_picture_OF$stomatal_density_max), width = 0.2, position = position_dodge(width = 0.75)) +
-  facet_grid(. ~ siteID) +
-  labs(x = "Species", y = "Stomatal Density (stomata / mm²)")
+Stomatal_site <- SP_data_picture_OF |> 
+  group_by(species, siteID) |> 
+  summarise(Sd_mean = mean(stomatal_density_p),
+            Sd_sd = sd(stomatal_density_p, na.rm = TRUE),
+            Sa_mean = mean(mean_stomatal_area_um2_p),
+            Sa_sd = sd(mean_stomatal_area_um2_p, na.rm = TRUE)) |> 
+  mutate(Sd_min = Sd_mean - Sd_sd, Sd_max = Sd_mean + Sd_sd,
+         Sa_min = Sa_mean - Sa_sd, Sa_max = Sa_mean + Sa_sd) 
+
+
+base_sd <- SP_data_picture_OF |> 
+  left_join(rbind(Stomatal_site)) |> 
+  ggplot(aes(x = siteID, y = stomatal_density_p))
+
+base_sa <- SP_data_picture_OF |> 
+  left_join(rbind(Stomatal_site)) |> 
+  ggplot(aes(x = siteID, y = mean_stomatal_area_um2_p))
+
+
+f_grid_stomatal_density1 <- base_sd +
+  geom_jitter(aes(color = species, shape = siteID), size = 3, ncol = 1) +
+  geom_errorbar(aes(ymin = Sd_min, ymax = Sd_max), width = 0.2) +
+  geom_point(aes(x = siteID, y = Sd_mean), size = 2)+
+  facet_grid(. ~ species) +
+  labs(x = "Species", y = "Stomatal Density (stomata / mm²)")+
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
 
 # Afficher le graphique
-print(f_grid_stomatal_density)
+print(f_grid_stomatal_density1)
+
+f_grid_stomatal_area1 <- base_sa +
+  geom_jitter(aes(color = species, shape = siteID), size = 3) +
+  geom_errorbar(aes(ymin = Sa_min, ymax = Sa_max), width = 0.2) +
+  geom_point(aes(x = siteID, y = Sa_mean), size = 2)+
+  facet_grid(. ~ species) +
+  labs(x = "Species", y = "Mean Stomatal Area (µm²)")+
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
+# Afficher le graphique
+print(f_grid_stomatal_area1)
+
+f_grid_stomatal_density2 <- ggplot(SP_data_picture_OF, aes(x = species, y = stomatal_density_p, fill = habitat)) +
+ geom_point(aes(color = species, shape = habitat), size = 3, width = 0.2, position = position_dodge(width = 0.75)) +
+  geom_errorbar(aes(ymin = stomatal_density_min, ymax = stomatal_density_max), width = 0.2, position = position_dodge(width = 0.75)) +
+  geom_point(aes(x = species, y = stomatal_density_mean), size = 2, position = position_dodge(width = 0.75))+
+  facet_grid(. ~ siteID) +
+  labs(x = "Species", y = "Stomatal Density (stomata / mm²)")+
+   theme(legend.position = "bottom") + 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
+# Afficher le graphique
+print(f_grid_stomatal_density2)
+
+f_grid_stomatal_area2 <- ggplot(SP_data_picture_OF, aes(x = species, y = mean_stomatal_area_um2_p, fill = habitat)) +
+  geom_point(aes(color = species, shape = habitat), size = 3, width = 0.2, position = position_dodge(width = 0.75)) +
+  geom_errorbar(aes(ymin = stomatal_area_min, ymax = stomatal_area_max), width = 0.2, position = position_dodge(width = 0.75)) +
+  geom_point(aes(x = species, y = mean_stomatal_area), size = 2, position = position_dodge(width = 0.75))+
+  facet_grid(. ~ siteID) +
+  labs(x = "Species", y = "Mean Stomatal Area (µm²)")+
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) +
+   theme(legend.position = "bottom")
+
+# Afficher le graphique
+print(f_grid_stomatal_area2)
+
 
 f_grid_stomatal_area <- ggplot(SP_data_picture_OF, aes(x = species, y = mean_stomatal_area_um2_p, fill = habitat)) +
   geom_boxplot() +
@@ -770,11 +951,69 @@ f_grid_stomatal_tradeoff <- ggplot(SP_data_picture_OF, aes(x = mean_stomatal_are
   geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
  # geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
   facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
-  labs(x = "Stomatal Area (µm²)", y = "Stomatal Density (stomata / mm²)")
+  labs(x = "Stomatal Area (µm²)", y = "Stomatal Density (stomata / mm²)") + 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
 
 # Afficher le graphique
 print(f_grid_stomatal_tradeoff)
 
+
+# Créer le graphique avec les points et les barres d'erreur
+f_grid_stomatal_tradeoff2 <- ggplot(SP_data_picture_OF, aes(x = mean_stomatal_area_um2_p, y = stomatal_density_p, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+ # geom_smooth(aes(color = species), method = "lm") +
+  labs(x = "Stomatal Area (µm²)", y = "Stomatal Density (stomata / mm²)") + 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
+# Afficher le graphique
+print(f_grid_stomatal_tradeoff2)
+
+site_join <- ggarrange(
+  f_grid_stomatal_density1, f_grid_stomatal_area1,
+  labels = c("a)", "b)"),
+  ncol = 1,
+  
+  common.legend = TRUE,
+  font.label = list(size = 17, face = "bold")
+)
+
+
+site_join
+
+habitat_join <- ggarrange(
+  f_grid_stomatal_density2, f_grid_stomatal_area2,
+  labels = c("a)", "b)"),
+  ncol = 1,
+  
+  common.legend = TRUE,
+  font.label = list(size = 17, face = "bold")
+) 
+
+
+habitat_join
+
+ggsave(filename = paste0(fig_save, "/site_comp.png"), plot = site_join, width = 10, height = 12, units = "in", dpi = 300)
+
+ggsave(filename = paste0(fig_save, "/habitat_comp.png"), plot = habitat_join, width = 10, height = 12, units = "in", dpi = 300)
+
+
+ggsave(filename = paste0(fig_save, "/habitat_tradeoff.png"), plot = f_grid_stomatal_tradeoff, width = 10, height = 6, units = "in", dpi = 300)
 
 ```
 
@@ -784,50 +1023,146 @@ plot with conductance
 f_grid_stomatal_cond <-plant_id_data_OF |> 
   filter(!is.na(stomatal_conductance_mean_p)) |> 
   filter(!is.na(habitat)) |>
-  ggplot(aes(x = mean_stomatal_density, y = stomatal_conductance_mean_p, fill = habitat)) +
-  geom_point(aes(shape = species), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  ggplot(aes(x = mean_stomatal_density, y = stomatal_conductance_mean_p, fill = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
   geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
  # geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
-  facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
-  labs(x = "Stomatal Density", y = "Stomatal conductance")
+  labs(x = "Stomatal Density (stomata / mm²)", y = "Stomatal conductance (mmol/(m².s)") +
+   theme(legend.position = "bottom")
 # Afficher le graphique
 print(f_grid_stomatal_cond)
 
 f_grid_stomatal_cond2 <-plant_id_data_OF |> 
   filter(!is.na(stomatal_conductance_mean_p)) |> 
   filter(!is.na(habitat)) |>
-  ggplot(aes(x = mean_stomatal_area_um2, y = stomatal_conductance_mean_p, fill = habitat)) +
-  geom_point(aes(shape = species), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  filter(stomatal_conductance_mean_p > 150) |> 
+  ggplot(aes(x = mean_stomatal_density, y = stomatal_conductance_mean_p, fill = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
   geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
-  facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
-  labs(x = "Stomatal size", y = "Stomatal conductance")
+ # geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
+  labs(x = "Stomatal Density (stomata / mm²)", y = "Stomatal conductance (mmol/(m².s)") +
+   theme(legend.position = "bottom")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
 # Afficher le graphique
 print(f_grid_stomatal_cond2)
 
-f_grid_stomatal_cond3 <- plant_id_data_OF |> 
+f_grid_stomatal_cond3 <-plant_id_data_OF |> 
+  filter(!is.na(stomatal_conductance_mean_p)) |> 
+  filter(!is.na(habitat)) |>
+  ggplot(aes(x = mean_stomatal_area_um2, y = stomatal_conductance_mean_p, fill = species)) +
+  geom_point(aes(shape = species), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+  labs(x = "Stomatal size (µm²)", y = "Stomatal conductance (mmol/(m².s)") +
+   theme(legend.position = "bottom")
+# Afficher le graphique
+print(f_grid_stomatal_cond3)
+
+f_grid_stomatal_cond4 <-plant_id_data_OF |> 
+  filter(!is.na(stomatal_conductance_mean_p)) |> 
+  filter(!is.na(habitat)) |>
+    filter(stomatal_conductance_mean_p > 150) |>
+  ggplot(aes(x = mean_stomatal_area_um2, y = stomatal_conductance_mean_p, fill = species)) +
+  geom_point(aes(shape = species), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+  labs(x = "Stomatal area (µm²)", y = "Stomatal conductance (mmol/(m².s)") +
+   theme(legend.position = "bottom")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+# Afficher le graphique
+print(f_grid_stomatal_cond4)
+
+f_grid_stomatal_cond5 <- plant_id_data_OF |> 
   filter(!is.na(stomatal_conductance_mean_p)) |>
   filter(!is.na(habitat)) |>
   ggplot(aes(x = species, y = stomatal_conductance_mean_p, fill = habitat)) +
   geom_boxplot() +
   geom_errorbar(aes(ymin = stomatal_conductance_min, ymax = stomatal_conductance_max), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
   facet_grid(. ~ siteID) +
-  labs(x = "Species", y = "Stomatal conductance")
+  labs(x = "Species", y = "Stomatal conductance (mmol/(m².s)") +
+   theme(legend.position = "bottom")
 
-print(f_grid_stomatal_cond3)
+print(f_grid_stomatal_cond5)
+
+cond_join <- ggarrange(
+  f_grid_stomatal_cond2, f_grid_stomatal_cond4,
+  labels = c("a)", "b)"),
+  ncol = 1,
+  
+  common.legend = TRUE,
+  font.label = list(size = 17, face = "bold")
+) 
+
+cond_join
+
+ggsave(filename = paste0(fig_save, "/cond_density.png"), plot = f_grid_stomatal_cond2, width = 10, height = 6, units = "in", dpi = 300)
+
+
+ggsave(filename = paste0(fig_save, "/cond_area.png"), plot = f_grid_stomatal_cond4, width = 10, height = 6, units = "in", dpi = 300)
+
+ggsave(filename = paste0(fig_save, "/cond_join.png"), plot = cond_join, width = 10, height = 12, units = "in", dpi = 300)
 ```
 
 leaf area :
 
 ```{r}
+#Density
+# Créer le graphique avec les points et les barres d'erreur
+f_grid_plant_height_tradeoff <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |>
+  ggplot(aes(y = mean_stomatal_density, x = plant_mean_height, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+ # geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
+ # facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal Density (stomata / mm²)", x = "Plant height (cm)") +
+   theme(legend.position = "bottom")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
+# Afficher le graphique
+print(f_grid_plant_height_tradeoff)
+
 # Créer le graphique avec les points et les barres d'erreur
 f_grid_leaf_area_tradeoff <- plant_id_data_OF |> 
   filter(!is.na(habitat)) |>
-  ggplot(aes(x = mean_stomatal_density, y = mean_leaf_area, color = species)) +
-  geom_point(aes(shape = species), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  ggplot(aes(y = mean_stomatal_density, x = mean_leaf_area, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
   geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
  # geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
-  facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
-  labs(x = "Stomatal Density (stomata / mm²)", y = "plant leaf area (cm²)")
+ # facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal Density (stomata / mm²)", x = "Plant mean leaf area (cm²)") +
+   theme(legend.position = "bottom")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
 
 # Afficher le graphique
 print(f_grid_leaf_area_tradeoff)
@@ -835,12 +1170,22 @@ print(f_grid_leaf_area_tradeoff)
 # Créer le graphique avec les points et les barres d'erreur
 f_grid_leaf_thickness_tradeoff <- plant_id_data_OF |> 
   filter(!is.na(habitat)) |>
-  ggplot(aes(x = mean_stomatal_density, y = mean_leaf_thickness, color = species)) +
-  geom_point(aes(shape = species), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  ggplot(aes(y = mean_stomatal_density, x = mean_leaf_thickness, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
   geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
  # geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
-  facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
-  labs(x = "Stomatal Density (stomata / mm²)", y = "plant leaf thickness (mm)")
+ # facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal Density (stomata / mm²)", x = "plant leaf thickness (mm)") +
+   theme(legend.position = "bottom")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
 
 # Afficher le graphique
 print(f_grid_leaf_thickness_tradeoff)
@@ -848,85 +1193,408 @@ print(f_grid_leaf_thickness_tradeoff)
 # Créer le graphique avec les points et les barres d'erreur
 f_grid_leaf_wetmass_tradeoff <- plant_id_data_OF |> 
   filter(!is.na(habitat)) |>
-  ggplot(aes(x = mean_stomatal_density, y = mean_leaf_wetmass, color = species)) +
-  geom_point(aes(shape = species), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  filter(mean_leaf_wetmass < 0.1) |> 
+  ggplot(aes(y = mean_stomatal_density, x = mean_leaf_wetmass, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
   geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
  # geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
-  facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
-  labs(x = "Stomatal Density (stomata / mm²)", y = "plant leaf wetmass (g)")
+ # facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal Density (stomata / mm²)", x = "plant leaf wetmass (g)") +
+   theme(legend.position = "bottom")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
 
 # Afficher le graphique
 print(f_grid_leaf_wetmass_tradeoff)
+
+leaf_join <- ggarrange(
+  f_grid_leaf_area_tradeoff, f_grid_plant_height_tradeoff,
+  labels = c("a)", "b)"),
+  ncol = 1,
+  
+  common.legend = TRUE,
+  font.label = list(size = 17, face = "bold")
+) 
+
+leaf_join
+
+
+ggsave(filename = paste0(fig_save, "/leaf_tradeoff.png"), plot = f_grid_leaf_area_tradeoff, width = 10, height = 6, units = "in", dpi = 300)
+
+ggsave(filename = paste0(fig_save, "/height_tradeoff.png"), plot = f_grid_plant_height_tradeoff, width = 10, height = 6, units = "in", dpi = 300)
+
+ggsave(filename = paste0(fig_save, "/leaf_join.png"), plot = leaf_join, width = 10, height = 12, units = "in", dpi = 300)
+```
+
+```{r}
+#Area
+# Créer le graphique avec les points et les barres d'erreur
+f_grid_plant_height_tradeoff2 <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |>
+  ggplot(aes(y = mean_stomatal_area_um2, x = plant_mean_height, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+ # geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
+ # facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal size (µm²)", x = "Plant height (cm)") +
+   theme(legend.position = "bottom")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
+# Afficher le graphique
+print(f_grid_plant_height_tradeoff2)
+
+# Créer le graphique avec les points et les barres d'erreur
+f_grid_leaf_area_tradeoff2 <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |>
+  ggplot(aes(y = mean_stomatal_area_um2, x = mean_leaf_area, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+ # geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
+ # facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal size (µm²)", x = "Plant leaf area (cm²)") +
+   theme(legend.position = "bottom")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
+# Afficher le graphique
+print(f_grid_leaf_area_tradeoff2)
+
+# Créer le graphique avec les points et les barres d'erreur
+f_grid_leaf_thickness_tradeoff2 <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |>
+  ggplot(aes(y = mean_stomatal_area_um2, x = mean_leaf_thickness, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+ # geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
+ # facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal size (µm²)", x = "plant leaf thickness (mm)") +
+   theme(legend.position = "bottom")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
+# Afficher le graphique
+print(f_grid_leaf_thickness_tradeoff2)
+
+# Créer le graphique avec les points et les barres d'erreur
+f_grid_leaf_wetmass_tradeoff2 <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |>
+  filter(mean_leaf_wetmass < 0.1) |> 
+  ggplot(aes(y = mean_stomatal_area_um2, x = mean_leaf_wetmass, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+ # geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
+ # facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal size (µm²)", x = "plant leaf wetmass (g)") +
+   theme(legend.position = "bottom")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
+# Afficher le graphique
+print(f_grid_leaf_wetmass_tradeoff2)
+
+ggsave(filename = paste0(fig_save, "/leaf_tradeoff_area.png"), plot = f_grid_leaf_area_tradeoff2, width = 10, height = 6, units = "in", dpi = 300)
+
+ggsave(filename = paste0(fig_save, "/thickness_tradeoff_area.png"), plot = f_grid_leaf_thickness_tradeoff2, width = 6, height = 6, units = "in", dpi = 300)
+
+ggsave(filename = paste0(fig_save, "/wetmass_tradeoff_area.png"), plot = f_grid_leaf_wetmass_tradeoff2, width = 6, height = 6, units = "in", dpi = 300)
 ```
 
 growth condition :
 
 ```{r}
 # Créer le graphique avec les points et les barres d'erreur
-f_grid_plant_soil_vwc <- plant_id_data_OF |> 
+f_grid_plant_soil_vwc2 <- plant_id_data_OF |> 
   filter(!is.na(habitat)) |>
-  ggplot(aes(x = mean_stomatal_density, y = VWC.soil_0_15_cm.mean, color = species)) +
-  geom_point(aes(shape = species), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  ggplot(aes(y = mean_stomatal_density, x = VWC.soil_0_15_cm.mean, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
   geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
-  facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
-  labs(x = "Stomatal Density (stomata / mm²)", y = "volumetric water content")
+#  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal Density (stomata / mm²)", x = "Volumetric water content")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
 
 # Afficher le graphique
-print(f_grid_plant_soil_vwc)
+print(f_grid_plant_soil_vwc2)
 
-f_grid_plant_soil_T <- plant_id_data_OF |> 
+f_grid_plant_soil_T2 <- plant_id_data_OF |> 
   filter(!is.na(habitat)) |>
-  ggplot(aes(x = mean_stomatal_density, y = T.soil_8_cm.mean, color = species)) +
-  geom_point(aes(shape = species), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  ggplot(aes(y = mean_stomatal_density, x = T.soil_8_cm.mean, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
   geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
-  facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
-  labs(x = "Stomatal Density (stomata / mm²)", y = "Soil Temperature (°C)")
+#  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal Density (stomata / mm²)", x = "Soil Temperature (°C)")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
 
 # Afficher le graphique
-print(f_grid_plant_soil_T)
+print(f_grid_plant_soil_T2)
 
-f_grid_plant_soil_Frost <- plant_id_data_OF |> 
+f_grid_plant_soil_Frost2 <- plant_id_data_OF |> 
   filter(!is.na(habitat)) |>
-  ggplot(aes(x = mean_stomatal_density, y = T.soil_8_cm.frostdays, color = species)) +
-  geom_point(aes(shape = species), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  ggplot(aes(y = mean_stomatal_density, x = T.soil_8_cm.frostdays, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
   geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
-  facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
-  labs(x = "Stomatal Density (stomata / mm²)", y = "Frostdays")
+#  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal Density (stomata / mm²)", x = "Number of frostdays")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
 
 # Afficher le graphique
-print(f_grid_plant_soil_Frost)
+print(f_grid_plant_soil_Frost2)
 
-f_grid_plant_air_T2cm <- plant_id_data_OF |> 
+f_grid_plant_air_T2cm2 <- plant_id_data_OF |> 
   filter(!is.na(habitat)) |>
-  ggplot(aes(x = mean_stomatal_density, y = T.air_2_cm.mean, color = species)) +
-  geom_point(aes(shape = species), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  ggplot(aes(y = mean_stomatal_density, x = T.air_2_cm.mean, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
   geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
-  facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
-  labs(x = "Stomatal Density (stomata / mm²)", y = "2 cm Air Temperature (°C)")
+#  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal Density (stomata / mm²)", x = "2cm Air Temperature (°C)")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
 
 # Afficher le graphique
-print(f_grid_plant_air_T2cm)
+print(f_grid_plant_air_T2cm2)
 
-f_grid_plant_air_FD2cm <- plant_id_data_OF |> 
+f_grid_plant_air_FD2cm2 <- plant_id_data_OF |> 
   filter(!is.na(habitat)) |>
-  ggplot(aes(x = mean_stomatal_density, y = T.air_2_cm.frostdays, color = species)) +
-  geom_point(aes(shape = species), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  ggplot(aes(y = mean_stomatal_density, x = T.air_2_cm.frostdays, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
   geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
-  facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
-  labs(x = "Stomatal Density (stomata / mm²)", y = "Frostdays")
+#  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal Density (stomata / mm²)", x = "Number of frostdays")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
 
 # Afficher le graphique
-print(f_grid_plant_air_FD2cm)
+print(f_grid_plant_air_FD2cm2)
 
-f_grid_plant_air_T15cm <- plant_id_data_OF |> 
+f_grid_plant_air_T15cm2 <- plant_id_data_OF |> 
   filter(!is.na(habitat)) |>
-  ggplot(aes(x = mean_stomatal_density, y = T.air_15_cm.mean, color = species)) +
-  geom_point(aes(shape = species), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  ggplot(aes(y = mean_stomatal_density, x = T.air_15_cm.mean, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
   geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
-  facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
-  labs(x = "Stomatal Density (stomata / mm²)", y = "15 cm Air Temperature (°C)")
+#  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal Density (stomata / mm²)", x = "15cm Air Temperature (°C)")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
 
-print(f_grid_plant_air_T15cm)
+print(f_grid_plant_air_T15cm2)
+
+
+soil_join <- ggarrange(
+  f_grid_plant_soil_vwc2, f_grid_plant_soil_vwc12, f_grid_plant_soil_T2, f_grid_plant_soil_T12,
+  labels = c("a)", "b)", "c)", "d)"),
+  ncol = 2,
+  nrow = 2,
+  common.legend = TRUE,
+  font.label = list(size = 17, face = "bold")
+) 
+
+soil_join
+
+#air_join <- ggarrange(
+#  f_grid_plant_air_T2cm2, f_grid_plant_air_T2cm12, f_grid_plant_air_FD2cm2, f_grid_plant_air_FD2cm12,
+#  labels = c("a)", "b)", "c)", "d)"),
+#  ncol = 2,
+#  nrow = 2,
+#  common.legend = TRUE,
+#  font.label = list(size = 17, face = "bold")
+#) 
+
+#air_join
+
+ggsave(filename = paste0(fig_save, "/Sd_VWC2.png"), plot = f_grid_plant_soil_vwc2, width = 10, height = 6, units = "in", dpi = 300)
+ggsave(filename = paste0(fig_save, "/Sd_Tsoil2.png"), plot = f_grid_plant_soil_T2, width = 10, height = 6, units = "in", dpi = 300)
+ggsave(filename = paste0(fig_save, "/Sd_Tsfrost2.png"), plot = f_grid_plant_soil_Frost2, width = 10, height = 6, units = "in", dpi = 300)
+ggsave(filename = paste0(fig_save, "/Sd_Ta2cm2.png"), plot = f_grid_plant_air_T2cm2, width = 10, height = 6, units = "in", dpi = 300)
+ggsave(filename = paste0(fig_save, "/Sd_TaFd2cm2.png"), plot = f_grid_plant_air_FD2cm2, width = 10, height = 6, units = "in", dpi = 300)
+ggsave(filename = paste0(fig_save, "/Sd_Ta15cm2.png"), plot = f_grid_plant_air_T15cm2, width = 10, height = 6, units = "in", dpi = 300)
+
+ggsave(filename = paste0(fig_save, "/soil_comp.png"), plot = soil_join, width = 10, height = 12, units = "in", dpi = 300)
+ggsave(filename = paste0(fig_save, "/air_comp.png"), plot = air_join, width = 10, height = 12, units = "in", dpi = 300)
+```
+
+growth variation
+
+```{r}
+# Créer le graphique avec les points et les barres d'erreur
+f_grid_plant_soil_sdvwc <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |>
+  ggplot(aes(y = sd_stomatal_density, x = VWC.soil_0_15_cm.sd, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal Density sd (stomata / mm²)", x = "sd volumetric water content")
+
+# Afficher le graphique
+print(f_grid_plant_soil_sdvwc)
+
+f_grid_plant_soil_Trange <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |>
+  ggplot(aes(y = mean_stomatal_density, x = T.soil_8_cm.drange, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal Density (stomata / mm²)", x = "Soil Temperature range (°C)")
+
+# Afficher le graphique
+print(f_grid_plant_soil_Trange)
+
+
+
+
+
+f_grid_plant_air_T2cmrange<- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |>
+  ggplot(aes(y = sd_stomatal_density, x = T.air_2_cm.drange, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal Density sd (stomata / mm²)", x = "2 cm Air Temperature range (°C)")
+
+# Afficher le graphique
+print(f_grid_plant_air_T2cmrange)
+
+
+
+f_grid_plant_air_T15cmrange <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |>
+  ggplot(aes(y = sd_stomatal_density, x = T.air_15_cm.drange, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal Density sd (stomata / mm²)", x = "15 cm Air Temperature range (°C)")
+
+print(f_grid_plant_air_T15cmrange)
+
+
+
+f_grid_plant_soil_corvwc <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |>
+  ggplot() +
+  geom_point(aes(y = mean_stomatal_density, x = VWC.soil_0_15_cm.mean, color = "VWC.soil_0_15_cm", shape = siteID), size = 3) +
+ geom_smooth(aes(y = mean_stomatal_density, x = VWC.soil_0_15_cm.mean, color = "VWC.soil_0_15_cm"), method = "lm") +
+  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal Density (stomata / mm²)", x = "volumetric water content")
+
+print(f_grid_plant_soil_corvwc)
+
+f_grid_plant_corT1 <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |>
+  ggplot() +
+  geom_point(aes(y = mean_stomatal_density, x = T.air_15_cm.mean, color = "T.air_15_cm",shape = siteID), size = 3) +
+  geom_smooth(aes(y = mean_stomatal_density, x = T.air_15_cm.mean, color = "T.air_15_cm"), method = "lm") +
+ # geom_point(aes(x = mean_stomatal_density, y = T.air_2_cm.mean, color = "T.air_2_cm"), size = 3) +
+ # geom_smooth(aes(x = mean_stomatal_density, y = T.air_2_cm.mean, color = "T.air_2_cm"), method = "lm") +
+ # geom_point(aes(x = mean_stomatal_density, y = T.soil_8_cm.mean, color = "T.soil_8_cm"), size = 3) +
+ # geom_smooth(aes(x = mean_stomatal_density, y = T.soil_8_cm.mean, color = "T.soil_8_cm"), method = "lm") +
+  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+ labs(y = "Stomatal Density sd (stomata / mm²)", x = "Temperature(°C)",
+       color = 'Source de Température')
+
+print(f_grid_plant_corT1)
+
+f_grid_plant_corT2 <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |>
+  ggplot() +
+ geom_point(aes(y = mean_stomatal_density, x = T.air_2_cm.mean, color = "T.air_2_cm", shape = siteID), size = 3) +
+ geom_smooth(aes(y = mean_stomatal_density, x = T.air_2_cm.mean, color = "T.air_2_cm"), method = "lm") +
+ # geom_point(aes(x = mean_stomatal_density, y = T.soil_8_cm.mean, color = "T.soil_8_cm"), size = 3) +
+ # geom_smooth(aes(x = mean_stomatal_density, y = T.soil_8_cm.mean, color = "T.soil_8_cm"), method = "lm") +
+  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+ labs(y = "Stomatal Density sd (stomata / mm²)", x = "Temperature(°C)",
+       color = 'Source de Température')
+
+print(f_grid_plant_corT2)
+
+f_grid_plant_corT3 <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |>
+  ggplot() +
+ geom_point(aes(y = mean_stomatal_density, x = T.soil_8_cm.mean, color = "T.soil_8_cm", shape = siteID), size = 3) +
+ geom_smooth(aes(y = mean_stomatal_density, x = T.soil_8_cm.mean, color = "T.soil_8_cm", fill = siteID), method = "lm") +
+  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+ labs(x = "Temperature(°C)", y = "Stomatal Density sd (stomata / mm²)",
+       color = 'Source de Température')
+
+print(f_grid_plant_corT3)
 ```
 
 ## Statistical analysis
@@ -934,15 +1602,128 @@ print(f_grid_plant_air_T15cm)
 New
 
 ```{r}
+library(lme4)
+library(car)
+library(multcomp)
+library(emmeans)
+
+
 # Convert variables to factors if necessary
 SP_data_picture_OF$habitat <- as.factor(SP_data_picture_OF$habitat)
 SP_data_picture_OF$siteID <- as.factor(SP_data_picture_OF$siteID)
 SP_data_picture_OF$species <- as.factor(SP_data_picture_OF$species)
+SP_data_picture_OF$leaf_id <- as.factor(SP_data_picture_OF$leaf_id)
+SP_data_picture_OF$plant_id <- as.factor(SP_data_picture_OF$plant_id)
 
 # Analysis by species
 
 # Function to perform analysis by species
-analyse_picture_by_species <- function(species) {
+
+  data_species <- SP_data_picture_OF
+  
+  # Apply transformations to improve normality (if necessary)
+  data_species$log_stomatal_density_p <- log(data_species$stomatal_density_p)
+  data_species$log_mean_stomatal_area_um2_p <- log(data_species$mean_stomatal_area_um2_p)
+  data_species$sqrt_stomatal_density_p <- sqrt(data_species$stomatal_density_p)
+  data_species$sqrt_mean_stomatal_area_um2_p <- sqrt(data_species$mean_stomatal_area_um2_p)
+  data_species$inv_stomatal_density_p <- 1/(data_species$stomatal_density_p)
+  data_species$inv_mean_stomatal_area_um2_p <- 1/(data_species$mean_stomatal_area_um2_p)
+
+
+  # ANOVA with interactions
+  model1 <- lmer(sqrt_stomatal_density_p ~ habitat * siteID * species+
+                (1 | siteID/plant_id/leaf_id) +
+                (1 | plant_id), data = data_species)
+  model2 <- lmer(inv_mean_stomatal_area_um2_p ~ habitat * siteID * species +
+                (1 | siteID/plant_id/leaf_id) +
+                (1 | plant_id), data = data_species)
+  
+
+  cat("**Stomatal density:**\n")
+  print(shapiro.test(residuals(model1)))
+  print(leveneTest(residuals(model1) ~ siteID, data = data_species))
+  cat("**Mean stomatal area:**\n")
+  print(shapiro.test(residuals(model2)))
+  print(leveneTest(residuals(model2) ~ siteID, data = data_species))
+
+  cat("**lmer results:**\n")
+  cat("**Stomatal density:**\n")
+  print(summary(model1, correlation=TRUE))
+  cat("**Mean stomatal area:**\n")
+  print(summary(model2, correlation=TRUE))
+
+  # Correlations
+  cat("**Correlations:**\n")
+  print(cor(data_species[, c("log_stomatal_density_p", "mean_stomatal_area_um2_p")]))
+
+```
+
+```{r}
+# Convert variables to factors if necessary
+SP_data_picture_OF$habitat <- as.factor(SP_data_picture_OF$habitat)
+SP_data_picture_OF$siteID <- as.factor(SP_data_picture_OF$siteID)
+SP_data_picture_OF$species <- as.factor(SP_data_picture_OF$species)
+SP_data_picture_OF$leaf_id <- as.factor(SP_data_picture_OF$leaf_id)
+SP_data_picture_OF$plant_id <- as.factor(SP_data_picture_OF$plant_id)
+
+# Analysis by species
+
+# Function to perform analysis by species
+  species = "VM"
+  data_species <- SP_data_picture_OF[SP_data_picture_OF$species == species,]
+  
+  # Apply transformations to improve normality
+  data_species$log_stomatal_density_p <- log(data_species$stomatal_density_p)
+  data_species$log_mean_stomatal_area_um2_p <- log(data_species$mean_stomatal_area_um2_p)
+  data_species$sqrt_stomatal_density_p <- sqrt(data_species$stomatal_density_p)
+  data_species$sqrt_mean_stomatal_area_um2_p <- sqrt(data_species$mean_stomatal_area_um2_p)
+  data_species$inv_stomatal_density_p <- 1/(data_species$stomatal_density_p)
+  data_species$inv_mean_stomatal_area_um2_p <- 1/(data_species$mean_stomatal_area_um2_p)
+
+
+  print(species)
+
+
+  model1 <- lmer(sqrt_stomatal_density_p ~ siteID * habitat +
+                (1 | siteID/plant_id/leaf_id) +
+                (1 | plant_id), data = data_species)
+  model2 <- lmer(log_mean_stomatal_area_um2_p ~siteID * habitat  +
+                (1 | siteID/plant_id/leaf_id) +
+                (1 | plant_id), data = data_species)
+  
+  cat("**Stomatal density:**\n")
+  print(shapiro.test(residuals(model1)))
+  print(leveneTest(residuals(model1) ~ siteID, data = data_species))
+  cat("**Mean stomatal area:**\n")
+  print(shapiro.test(residuals(model2)))
+  print(leveneTest(residuals(model2) ~ siteID, data = data_species))
+
+
+  cat("**lmer results:**\n")
+  print(summary(model1))
+  print(summary(model2))
+
+cat("**post hoc test avec glht:**\n") 
+glht_model1 <- glht(model1, linfct = mcp(siteID = "Tukey", habitat = "Tukey"))
+print(summary(glht_model1))
+glht_model2 <- glht(model2, linfct = mcp(siteID = "Tukey", habitat = "Tukey"))
+print(summary(glht_model2))
+
+cat("**post hoc test avec emms:**\n") 
+cat("**Stomatal density**\n") 
+emms1 <- emmeans(model1, ~ siteID * habitat)
+print(summary(emms1))
+print(pairs(emms1, adjust = "BH"))
+cat("**Stomatal area**\n") 
+
+
+  # Correlations
+  cat("**Correlations:**\n")
+  print(cor.test(data_species$stomatal_density_p, data_species$mean_stomatal_area_um2_p))
+
+
+# Function to perform analysis by species
+species = "VV"
   data_species <- SP_data_picture_OF[SP_data_picture_OF$species == species,]
   
   # Apply transformations to improve normality (if necessary)
@@ -953,41 +1734,49 @@ analyse_picture_by_species <- function(species) {
   data_species$inv_stomatal_density_p <- 1/(data_species$stomatal_density_p)
   data_species$inv_mean_stomatal_area_um2_p <- 1/(data_species$mean_stomatal_area_um2_p)
 
+
   print(species)
 
-  # ANOVA with interactions
-  model1 <- aov(stomatal_density_p ~ habitat * siteID, data = data_species)
-  model2 <- aov(inv_mean_stomatal_area_um2_p ~ habitat * siteID, data = data_species)
-  
-  # Check normality of residuals
-  cat("**Species:**", species, "\n")
-  cat("**Stomatal density:**\n")
-  print(shapiro.test(residuals(model1)))
-  cat("**Mean stomatal area:**\n")
-  print(shapiro.test(residuals(model2)))
 
-  # Post-hoc (if ANOVA is significant)
-  cat("**ANOVA results:**\n")
-  print(summary(model1))
-  print(summary(model2))
-  #if(summary(model1)[[1]]$Pr[1] < 0.05) {
-    cat("Multiple comparison for stomatal density: \n")
-    print(TukeyHSD(model1))
-  #}
-  #if(summary(model2)[[1]]$Pr[1] < 0.05) {
-    cat("Multiple comparison for mean stomatal area: \n")
-    print(TukeyHSD(model2))
-  #}
+  model3 <- lmer(stomatal_density_p ~ siteID * habitat +
+                (1 | siteID/plant_id/leaf_id) +
+                (1 | plant_id), data = data_species)
+  model4 <- lmer(log_mean_stomatal_area_um2_p ~ siteID * habitat  +
+                (1 | siteID/plant_id/leaf_id) +
+                (1 | plant_id), data = data_species)
+  
+  cat("**Stomatal density:**\n")
+  print(shapiro.test(residuals(model3)))
+  print(leveneTest(residuals(model3) ~ siteID, data = data_species))
+  cat("**Mean stomatal area:**\n")
+  print(shapiro.test(residuals(model4)))
+  print(leveneTest(residuals(model4) ~ siteID, data = data_species))
+
+
+  cat("**lmer results:**\n")
+  print(summary(model3))
+  print(summary(model4))
+ 
+cat("**post hoc test:**\n") 
+glht_model3 <- glht(model3, linfct = mcp(siteID = "Tukey", habitat = "Tukey"))
+print(summary(glht_model3))
+glht_model4 <- glht(model4, linfct = mcp(siteID = "Tukey", habitat = "Tukey"))
+print(summary(glht_model4))
+  
+cat("**post hoc test avec emms:**\n") 
+cat("**Stomatal density:**\n") 
+emms3 <- emmeans(model3, ~ siteID * habitat)
+print(summary(emms3))
+print(pairs(emms3, adjust = "BH"))
+cat("**Stomatal area**\n") 
+emms4 <- emmeans(model4, ~ siteID * habitat)
+print(summary(emms4))
+print(pairs(emms4, adjust = "BH"))
 
   # Correlations
   cat("**Correlations:**\n")
-  print(cor(data_species[, c("log_stomatal_density_p", "mean_stomatal_area_um2_p")]))
-}
-
-# Apply the function to both species
-analyse_picture_by_species("VM")
-analyse_picture_by_species("VV")
-
+  print(cor.test(data_species$stomatal_density_p, data_species$mean_stomatal_area_um2_p))
+  
 ```
 
 plant
@@ -1003,7 +1792,7 @@ plant_id_data_OF$species <- as.factor(plant_id_data_OF$species)
 
 # Analyse par espèce
 
-species <= "VM"
+species <- "VM"
   data_species <- plant_id_data_OF[plant_id_data_OF$species == species,]
   data_species$log_mean_stomatal_density <- log(data_species$mean_stomatal_density)
   data_species$log_mean_stomatal_area_um2 <- log(data_species$mean_stomatal_area_um2)
@@ -1038,20 +1827,24 @@ species <= "VM"
 
   # Corrélations
   cat("**Corrélations clim :**\n")
-  data_cor <- data_species[, c("mean_stomatal_density", "mean_stomatal_area_um2", "T.air_15_cm.mean", "T.air_2_cm.mean", "T.soil_8_cm.mean", "VWC.soil_0_15_cm.mean")
-                        ] |> 
+  data_cor <- data_species |> 
+    select(mean_stomatal_density, mean_stomatal_area_um2, sd_stomatal_density, sd_stomatal_area_um2, T.air_15_cm.mean, T.air_2_cm.mean, T.soil_8_cm.mean, VWC.soil_0_15_cm.mean, T.air_15_cm.drange, T.air_2_cm.drange, T.soil_8_cm.drange, VWC.soil_0_15_cm.sd)|> 
+    filter(!is.na(sd_stomatal_density)) |> 
     filter(!is.na(T.air_15_cm.mean))
   cor_clim_VM <- (cor(data_cor))
 
-    cat("**Corrélations leaf :**\n")
-  data_cor <- data_species[, c("mean_stomatal_density", "mean_stomatal_area_um2", "mean_leaf_area", 
-                               "mean_leaf_thickness", "mean_leaf_wetmass")
-                        ] |> 
-    filter(!is.nan(mean_leaf_area))
+     cat("**Corrélations leaf :**\n")
+  data_cor <- data_species |> 
+    select(mean_stomatal_density, mean_stomatal_area_um2, sd_stomatal_density, sd_stomatal_area_um2, T.air_15_cm.mean, T.air_2_cm.mean, T.soil_8_cm.mean, VWC.soil_0_15_cm.mean, T.air_15_cm.drange, T.air_2_cm.drange, T.soil_8_cm.drange, VWC.soil_0_15_cm.sd,
+                               mean_leaf_area, mean_leaf_thickness, mean_leaf_wetmass) |>  
+        filter(!is.na(sd_stomatal_density)) |> 
+        filter(!is.na(T.air_15_cm.mean)) |> 
+    filter(!is.nan(mean_leaf_area)) |> 
+        filter(!is.nan(mean_leaf_thickness))
   cor_leaf_VM <- (cor(data_cor))
 
   
-species <= "VV"
+species <- "VV"
   data_species <- plant_id_data_OF[plant_id_data_OF$species == species,]
   data_species$log_mean_stomatal_density <- log(data_species$mean_stomatal_density)
   data_species$log_mean_stomatal_area_um2 <- log(data_species$mean_stomatal_area_um2)
@@ -1086,17 +1879,131 @@ species <= "VV"
 
   # Corrélations
   cat("**Corrélations clim :**\n")
-  data_cor <- data_species[, c("mean_stomatal_density", "mean_stomatal_area_um2", "T.air_15_cm.mean", "T.air_2_cm.mean", "T.soil_8_cm.mean", "VWC.soil_0_15_cm.mean")
-                        ] |> 
+  data_cor <- data_species |> 
+    select(mean_stomatal_density, mean_stomatal_area_um2, sd_stomatal_density, sd_stomatal_area_um2, T.air_15_cm.mean, T.air_2_cm.mean, T.soil_8_cm.mean, VWC.soil_0_15_cm.mean, T.air_15_cm.drange, T.air_2_cm.drange, T.soil_8_cm.drange, VWC.soil_0_15_cm.sd)|> 
+        filter(!is.na(sd_stomatal_density)) |> 
     filter(!is.na(T.air_15_cm.mean))
   cor_clim_VV <- (cor(data_cor))
 
     cat("**Corrélations leaf :**\n")
-  data_cor <- data_species[, c("mean_stomatal_density", "mean_stomatal_area_um2", "mean_leaf_area", 
-                               "mean_leaf_thickness", "mean_leaf_wetmass")
-                        ] |> 
-    filter(!is.nan(mean_leaf_area))
-  cor_leaf_VV <- (cor(data_cor))
+  data_cor <- data_species |> 
+    select(mean_stomatal_density, mean_stomatal_area_um2, sd_stomatal_density, sd_stomatal_area_um2, T.air_15_cm.mean, T.air_2_cm.mean, T.soil_8_cm.mean, VWC.soil_0_15_cm.mean, T.air_15_cm.drange, T.air_2_cm.drange, T.soil_8_cm.drange, VWC.soil_0_15_cm.sd,
+                               mean_leaf_area, mean_leaf_thickness, mean_leaf_wetmass) |> 
+    filter(!is.na(sd_stomatal_density)) |> 
+        filter(!is.na(T.air_15_cm.mean)) |> 
+    filter(!is.nan(mean_leaf_area)) |> 
+    filter(!is.nan(mean_leaf_thickness))
+
+  
+```
+
+pvalues
+
+```{r}
+
+# Fonction pour calculer les p-values
+get_pvalue <- function(x, y) {
+  test <- cor.test(x, y)
+  return(test$p.value)
+}
+
+species <- "VM"
+  data_species <- plant_id_data_OF[plant_id_data_OF$species == species,]
+
+data_cor <- data_species %>%
+  select(mean_stomatal_density, mean_stomatal_area_um2, sd_stomatal_density, sd_stomatal_area_um2, 
+         T.air_15_cm.mean, T.air_2_cm.mean, T.soil_8_cm.mean, VWC.soil_0_15_cm.mean, 
+         T.air_15_cm.drange, T.air_2_cm.drange, T.soil_8_cm.drange, VWC.soil_0_15_cm.sd,
+         mean_leaf_area, mean_leaf_thickness, mean_leaf_wetmass) %>%
+  filter(!is.na(sd_stomatal_density)) %>%
+  filter(!is.na(T.air_15_cm.mean)) %>%
+  filter(!is.nan(mean_leaf_area)) %>%
+  filter(!is.nan(mean_leaf_thickness))
+
+
+# Matrice de corrélation
+cor_matrix <- cor(data_cor)
+
+# Matrice de p-values
+p_value_matrix <- matrix(NA, nrow = ncol(data_cor), ncol = ncol(data_cor))
+rownames(p_value_matrix) <- colnames(cor_matrix)
+colnames(p_value_matrix) <- colnames(cor_matrix)
+
+# Calculer les p-values
+for (i in 1:(ncol(data_cor) - 1)) {
+  for (j in (i + 1):ncol(data_cor)) {
+    p_value_matrix[i, j] <- get_pvalue(data_cor[[i]], data_cor[[j]])
+    p_value_matrix[j, i] <- p_value_matrix[i, j]  # Matrice symétrique
+  }
+}
+
+# Convertir les matrices en data frames
+cor_df <- as.data.frame(cor_matrix)
+p_value_df <- as.data.frame(p_value_matrix)
+
+# Combiner les coefficients de corrélation et les p-values
+result_VM <- bind_rows(
+  as_tibble(cor_df, rownames = "Variable") |> 
+    pivot_longer(-Variable, names_to = "Variable_2", values_to = "Correlation") |> 
+    mutate(Type = "Correlation"),
+  as_tibble(p_value_df, rownames = "Variable") |> 
+    pivot_longer(-Variable, names_to = "Variable_2", values_to = "P_value") |> 
+    mutate(Type = "P-value")
+) |> 
+pivot_wider(names_from = Type, values_from = c(Correlation, P_value))
+
+# Afficher le résultat
+print(result_VM)
+
+species <- "VV"
+  data_species <- plant_id_data_OF[plant_id_data_OF$species == species,]
+
+data_cor <- data_species %>%
+  select(mean_stomatal_density, mean_stomatal_area_um2, sd_stomatal_density, sd_stomatal_area_um2, 
+         T.air_15_cm.mean, T.air_2_cm.mean, T.soil_8_cm.mean, VWC.soil_0_15_cm.mean, 
+         T.air_15_cm.drange, T.air_2_cm.drange, T.soil_8_cm.drange, VWC.soil_0_15_cm.sd,
+         mean_leaf_area, mean_leaf_thickness, mean_leaf_wetmass) %>%
+  filter(!is.na(sd_stomatal_density)) %>%
+  filter(!is.na(T.air_15_cm.mean)) %>%
+  filter(!is.nan(mean_leaf_area)) %>%
+  filter(!is.nan(mean_leaf_thickness))
+
+
+# Matrice de corrélation
+cor_matrix <- cor(data_cor)
+
+# Matrice de p-values
+p_value_matrix <- matrix(NA, nrow = ncol(data_cor), ncol = ncol(data_cor))
+rownames(p_value_matrix) <- colnames(cor_matrix)
+colnames(p_value_matrix) <- colnames(cor_matrix)
+
+# Calculer les p-values
+for (i in 1:(ncol(data_cor) - 1)) {
+  for (j in (i + 1):ncol(data_cor)) {
+    p_value_matrix[i, j] <- get_pvalue(data_cor[[i]], data_cor[[j]])
+    p_value_matrix[j, i] <- p_value_matrix[i, j]  # Matrice symétrique
+  }
+}
+
+# Convertir les matrices en data frames
+cor_df <- as.data.frame(cor_matrix)
+p_value_df <- as.data.frame(p_value_matrix)
+
+# Combiner les coefficients de corrélation et les p-values
+result_VV <- bind_rows(
+  as_tibble(cor_df, rownames = "Variable") |> 
+    pivot_longer(-Variable, names_to = "Variable_2", values_to = "Correlation") |> 
+    mutate(Type = "Correlation"),
+  as_tibble(p_value_df, rownames = "Variable") |> 
+    pivot_longer(-Variable, names_to = "Variable_2", values_to = "P_value") |> 
+    mutate(Type = "P-value")
+) |> 
+pivot_wider(names_from = Type, values_from = c(Correlation, P_value))
+
+# Afficher le résultat
+print(result_VV)
+
+
 ```
 
 old
