@@ -73,9 +73,7 @@ metadata <- metadata |>
   arrange(metadata[, loggerIDColumn])
 
 # Sélectionner un dossier à traiter
-folder_path <- "C:/Users/Touriere/Desktop/GEN/4A/SIRD/Data/TOMST_loggers_data/DURIN_all"
-#SO/Sogndal_31.05.2024"      
-
+folder_path <- "D:/Utilisateurs/Touriere/Documents/GEN/4A/SIRD/Data/TOMST_loggers_data/DURIN_all"
 
 # Lister les fichiers dans le dossier
 file_list <- list.files(folder_path)
@@ -116,8 +114,8 @@ tms <- mc_read_data(files_table = path_data,
 tms <- mc_join(tms)
 
 tms_info <- mc_info_clean(tms)
-tms_info$start_date = tms_info$end_date %m-% months(2)
-#tms_info$start_date = tms_info$end_date %m-% months(12)
+#tms_info$start_date = tms_info$end_date %m-% months(2)
+tms_info$start_date = tms_info$end_date %m-% months(12)
 
 # Start and end are list 
 #start <-  as.POSIXct(as.Date(active_metadata$date_in, format = "%d/%m/%Y"), tz = "UTC")
@@ -233,11 +231,8 @@ Calculation of the stomatal traits
 ```{r calculation of the stomatal area}
 
 # Loading annotations 
-#annotations <- fromJSON("D:/Utilisateurs/Touriere/Téléchargements/DURIN_SP_area.v10i.coco-segmentation/train/_annotations.coco.json")
+annotations <- fromJSON("D:/Utilisateurs/Touriere/Documents/GEN/4A/SIRD/Data/Stomatal_peels/DURIN_SP_area_relabel.v2i.coco/_annotations.coco.json")
 
-#annotations <- fromJSON("C:/Users/Touriere/Desktop/GEN/4A/SIRD/Data/Stomatal_peels/DURIN_SP_area.v17i.coco/_annotations.coco.json")
-
-annotations <- fromJSON("C:/Users/Touriere/Desktop/GEN/4A/SIRD/Data/Stomatal_peels/DURIN_SP_area_relabel.v2i.coco/_annotations.coco.json")
 
 annotations_df <- as.data.frame(annotations$annotations)
 images_df <- as.data.frame(annotations$images)
@@ -534,8 +529,8 @@ SP_data <- SP_data |>
 Importation of leaf area
 
 ```{r}
-leaf_area_PI_Rey <- read.csv("D:/Utilisateurs/Touriere/Documents/SIRD_leaf_area/Calculation/2024_DURIN_Leaf_Scans_1907_PI_REY/Output/DURIN_Calculated_Leaf_Area_2024_07_19.csv")
-leaf_area_PI_Grogu <- read.csv("D:/Utilisateurs/Touriere/Documents/SIRD_leaf_area/Calculation/2024_DURIN_leaf_scans_1907_PI_Grogu/Output/DURIN_Calculated_Leaf_Area_2024_07_19_grogu.csv")
+leaf_area_PI_Rey <- read.csv("DURIN_Calculated_Leaf_Area_2024_07_19.csv")
+leaf_area_PI_Grogu <- read.csv("DURIN_Calculated_Leaf_Area_2024_07_19_grogu.csv")
 
 leaf_area_PI <- rbind(leaf_area_PI_Rey,leaf_area_PI_Grogu)
 rm(leaf_area_PI_Grogu, leaf_area_PI_Rey)
@@ -716,13 +711,18 @@ plant_id_data <- plant_id_data |>
             by = join_by(plant_id))
   
 
-plant_id_data_OF <-filter(plant_id_data, habitat %in% c("Open", "Forested"))
+plant_id_data_OF <-filter(plant_id_data, habitat %in% c("Open", "Forested")) |> 
+   mutate(siteID = ifelse(siteID == "Senje", "Senja", siteID))
+plant_id_data_OF$siteID <- factor(plant_id_data_OF$siteID, levels = c("Kautokeino", "Senja", "Sogndal", "Lygra"))
 plant_id_data_DN <-filter(plant_id_data, !habitat %in% c("Open", "Forested"))
 plant_id_data_LY_O<- plant_id_data |> 
   filter(siteID == "Lygra") |> 
   filter(habitat != "Forested")
 
-SP_data_picture_OF <-filter(SP_data_picture, habitat %in% c("Open", "Forested"))
+SP_data_picture_OF <-filter(SP_data_picture, habitat %in% c("Open", "Forested"))|> 
+   mutate(siteID = ifelse(siteID == "Senje", "Senja", siteID))
+SP_data_picture_OF$siteID <- factor(SP_data_picture_OF$siteID, levels = c("Kautokeino", "Senja", "Sogndal", "Lygra"))
+
 SP_data_picture_DN <-filter(SP_data_picture, !habitat %in% c("Open", "Forested"))
 SP_data_picture_LY_O<- SP_data_picture |> 
   filter(siteID == "Lygra") |> 
@@ -754,8 +754,8 @@ Sd_VV <- SP_data_picture_OF |>
          Sa_min = Sa_mean - Sa_sd, Sa_max = Sa_mean + Sa_sd) |> 
   mutate(species = "VV")
 
-fig_save <- "C:/Users/Touriere/Desktop/GEN/4A/SIRD/Rapport/Images/R"
-  
+fig_save <- "D:/Utilisateurs/Touriere/Documents/GEN/4A/SIRD/Rapport/Images/R"
+
 
 
 base <- SP_data_picture_OF |> 
@@ -834,7 +834,7 @@ ggsave(filename = paste0(fig_save, "/species_comp.png"), plot = p_jit_join, widt
 
 ```
 
-mlde
+Sites and habitats
 
 ```{r}
 
@@ -969,7 +969,7 @@ print(f_grid_stomatal_tradeoff)
 # Créer le graphique avec les points et les barres d'erreur
 f_grid_stomatal_tradeoff2 <- ggplot(SP_data_picture_OF, aes(x = mean_stomatal_area_um2_p, y = stomatal_density_p, color = species)) +
   geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
- # geom_smooth(aes(color = species), method = "lm") +
+  geom_smooth(aes(color = species), method = "lm") +
   labs(x = "Stomatal Area (µm²)", y = "Stomatal Density (stomata / mm²)") + 
   theme(
     axis.title.x = element_text(size = 14), 
@@ -983,6 +983,25 @@ f_grid_stomatal_tradeoff2 <- ggplot(SP_data_picture_OF, aes(x = mean_stomatal_ar
 
 # Afficher le graphique
 print(f_grid_stomatal_tradeoff2)
+
+
+
+# Ajuster et résumer le modèle linéaire pour chaque espèce
+model_summaries <- SP_data_picture_OF %>%
+  group_by(species,siteID) %>%
+  summarize(
+    model = list(lm(stomatal_density_p ~ mean_stomatal_area_um2_p, data = cur_data()))
+  ) %>%
+  mutate(summary = lapply(model, summary))
+
+# Afficher species, siteID, et le résumé du modèle
+for (i in 1:nrow(model_summaries)) {
+  cat("Species:", model_summaries$species[i], "\n")
+  cat("SiteID:", as.character(model_summaries$siteID[i]), "\n")
+  print(model_summaries$summary[[i]])
+  cat("\n-----------------\n")
+}
+
 
 site_join <- ggarrange(
   f_grid_stomatal_density1, f_grid_stomatal_area1,
@@ -1042,6 +1061,7 @@ f_grid_stomatal_cond2 <-plant_id_data_OF |>
  # geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
   labs(x = "Stomatal Density (stomata / mm²)", y = "Stomatal conductance (mmol/(m².s)") +
    theme(legend.position = "bottom")+ 
+   # facet_grid(. ~ species) +
   theme(
     axis.title.x = element_text(size = 14), 
     axis.title.y = element_text(size = 14), 
@@ -1060,7 +1080,7 @@ f_grid_stomatal_cond3 <-plant_id_data_OF |>
   ggplot(aes(x = mean_stomatal_area_um2, y = stomatal_conductance_mean_p, fill = species)) +
   geom_point(aes(shape = species), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
   geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
-  labs(x = "Stomatal size (µm²)", y = "Stomatal conductance (mmol/(m².s)") +
+  labs(x = "Stomatal area (µm²)", y = "Stomatal conductance (mmol/(m².s)") +
    theme(legend.position = "bottom")
 # Afficher le graphique
 print(f_grid_stomatal_cond3)
@@ -1070,10 +1090,11 @@ f_grid_stomatal_cond4 <-plant_id_data_OF |>
   filter(!is.na(habitat)) |>
     filter(stomatal_conductance_mean_p > 150) |>
   ggplot(aes(x = mean_stomatal_area_um2, y = stomatal_conductance_mean_p, fill = species)) +
-  geom_point(aes(shape = species), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
   geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
   labs(x = "Stomatal area (µm²)", y = "Stomatal conductance (mmol/(m².s)") +
    theme(legend.position = "bottom")+ 
+   # facet_grid(. ~ species) +
   theme(
     axis.title.x = element_text(size = 14), 
     axis.title.y = element_text(size = 14), 
@@ -1143,6 +1164,7 @@ f_grid_plant_height_tradeoff <- plant_id_data_OF |>
 
 # Afficher le graphique
 print(f_grid_plant_height_tradeoff)
+
 
 # Créer le graphique avec les points et les barres d'erreur
 f_grid_leaf_area_tradeoff <- plant_id_data_OF |> 
@@ -1215,7 +1237,7 @@ f_grid_leaf_wetmass_tradeoff <- plant_id_data_OF |>
 print(f_grid_leaf_wetmass_tradeoff)
 
 leaf_join <- ggarrange(
-  f_grid_leaf_area_tradeoff, f_grid_plant_height_tradeoff,
+  f_grid_plant_height_tradeoff,f_grid_leaf_area_tradeoff,
   labels = c("a)", "b)"),
   ncol = 1,
   
@@ -1223,14 +1245,83 @@ leaf_join <- ggarrange(
   font.label = list(size = 17, face = "bold")
 ) 
 
-leaf_join
 
+
+wet_join <- ggarrange(
+  f_grid_leaf_thickness_tradeoff,f_grid_leaf_wetmass_tradeoff,
+  labels = c("a)", "b)"),
+  ncol = 1,
+  
+  common.legend = TRUE,
+  font.label = list(size = 17, face = "bold")
+) 
+
+wet_join
+
+#coefficient of linear regression
+plant_id_data_OF_VM <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VM")
+modeleVM <-  lm(mean_stomatal_density ~ plant_mean_height, data = plant_id_data_OF_VM)
+resume_modeleVM_height<- summary(modeleVM)
+print(resume_modeleVM_height)
+plant_id_data_OF_VV <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VV")
+modeleVV <-  lm(mean_stomatal_density ~ plant_mean_height, data = plant_id_data_OF_VV)
+resume_modeleVV_height<- summary(modeleVV)
+print(resume_modeleVV_height)
+
+
+#coefficient of linear regression
+plant_id_data_OF_VM <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VM")
+modeleVM <-  lm(mean_stomatal_density ~ mean_leaf_area, data = plant_id_data_OF_VM)
+resume_modeleVM_leafarea<- summary(modeleVM)
+print(resume_modeleVM_leafarea)
+plant_id_data_OF_VV <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VV")
+modeleVV <-  lm(mean_stomatal_density ~ mean_leaf_area, data = plant_id_data_OF_VV)
+resume_modeleVV_leafarea<- summary(modeleVV)
+print(resume_modeleVV_leafarea)
+
+#coefficient of linear regression
+plant_id_data_OF_VM <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VM")
+modeleVM <-  lm(mean_stomatal_density ~ mean_leaf_thickness, data = plant_id_data_OF_VM)
+resume_modeleVM_leaftk<- summary(modeleVM)
+print(resume_modeleVM_leaftk)
+plant_id_data_OF_VV <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VV")
+modeleVV <-  lm(mean_stomatal_density ~ mean_leaf_thickness, data = plant_id_data_OF_VV)
+resume_modeleVV_leaftk<- summary(modeleVV)
+print(resume_modeleVV_leaftk)
+
+#coefficient of linear regression
+plant_id_data_OF_VM <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VM")
+modeleVM <-  lm(mean_stomatal_density ~ mean_leaf_wetmass, data = plant_id_data_OF_VM)
+resume_modeleVM_leafwm<- summary(modeleVM)
+print(resume_modeleVM_leafwm)
+plant_id_data_OF_VV <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VV")
+modeleVV <-  lm(mean_stomatal_density ~ mean_leaf_wetmass, data = plant_id_data_OF_VV)
+resume_modeleVV_leafwm<- summary(modeleVV)
+print(resume_modeleVV_leafwm)
 
 ggsave(filename = paste0(fig_save, "/leaf_tradeoff.png"), plot = f_grid_leaf_area_tradeoff, width = 10, height = 6, units = "in", dpi = 300)
 
 ggsave(filename = paste0(fig_save, "/height_tradeoff.png"), plot = f_grid_plant_height_tradeoff, width = 10, height = 6, units = "in", dpi = 300)
 
 ggsave(filename = paste0(fig_save, "/leaf_join.png"), plot = leaf_join, width = 10, height = 12, units = "in", dpi = 300)
+
+ggsave(filename = paste0(fig_save, "/wetmass_join.png"), plot = wet_join, width = 10, height = 12, units = "in", dpi = 300)
 ```
 
 ```{r}
@@ -1243,7 +1334,7 @@ f_grid_plant_height_tradeoff2 <- plant_id_data_OF |>
   geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
  # geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
  # facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
-  labs(y = "Stomatal size (µm²)", x = "Plant height (cm)") +
+  labs(y = "Stomatal area (µm²)", x = "Plant height (cm)") +
    theme(legend.position = "bottom")+ 
   theme(
     axis.title.x = element_text(size = 14), 
@@ -1266,7 +1357,7 @@ f_grid_leaf_area_tradeoff2 <- plant_id_data_OF |>
   geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
  # geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
  # facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
-  labs(y = "Stomatal size (µm²)", x = "Plant leaf area (cm²)") +
+  labs(y = "Stomatal area (µm²)", x = "Plant leaf area (cm²)") +
    theme(legend.position = "bottom")+ 
   theme(
     axis.title.x = element_text(size = 14), 
@@ -1289,7 +1380,7 @@ f_grid_leaf_thickness_tradeoff2 <- plant_id_data_OF |>
   geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
  # geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
  # facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
-  labs(y = "Stomatal size (µm²)", x = "plant leaf thickness (mm)") +
+  labs(y = "Stomatal area (µm²)", x = "plant leaf thickness (mm)") +
    theme(legend.position = "bottom")+ 
   theme(
     axis.title.x = element_text(size = 14), 
@@ -1313,7 +1404,7 @@ f_grid_leaf_wetmass_tradeoff2 <- plant_id_data_OF |>
   geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
  # geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
  # facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
-  labs(y = "Stomatal size (µm²)", x = "plant leaf wetmass (g)") +
+  labs(y = "Stomatal area (µm²)", x = "plant leaf wetmass (g)") +
    theme(legend.position = "bottom")+ 
   theme(
     axis.title.x = element_text(size = 14), 
@@ -1328,6 +1419,64 @@ f_grid_leaf_wetmass_tradeoff2 <- plant_id_data_OF |>
 # Afficher le graphique
 print(f_grid_leaf_wetmass_tradeoff2)
 
+
+#coefficient of linear regression
+plant_id_data_OF_VM <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VM")
+modeleVM <-  lm(mean_stomatal_area_um2 ~ plant_mean_height, data = plant_id_data_OF_VM)
+resume_modeleVM_height<- summary(modeleVM)
+print(resume_modeleVM_height)
+plant_id_data_OF_VV <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VV")
+modeleVV <-  lm(mean_stomatal_area_um2 ~ plant_mean_height, data = plant_id_data_OF_VV)
+resume_modeleVV_height<- summary(modeleVV)
+print(resume_modeleVV_height)
+
+
+#coefficient of linear regression
+plant_id_data_OF_VM <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VM")
+modeleVM <-  lm(mean_stomatal_area_um2 ~ mean_leaf_area, data = plant_id_data_OF_VM)
+resume_modeleVM_leafarea<- summary(modeleVM)
+print(resume_modeleVM_leafarea)
+plant_id_data_OF_VV <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VV")
+modeleVV <-  lm(mean_stomatal_area_um2 ~ mean_leaf_area, data = plant_id_data_OF_VV)
+resume_modeleVV_leafarea<- summary(modeleVV)
+print(resume_modeleVV_leafarea)
+
+#coefficient of linear regression
+plant_id_data_OF_VM <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VM")
+modeleVM <-  lm(mean_stomatal_area_um2 ~ mean_leaf_thickness, data = plant_id_data_OF_VM)
+resume_modeleVM_leaftk<- summary(modeleVM)
+print(resume_modeleVM_leaftk)
+plant_id_data_OF_VV <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VV")
+modeleVV <-  lm(mean_stomatal_area_um2 ~ mean_leaf_thickness, data = plant_id_data_OF_VV)
+resume_modeleVV_leaftk<- summary(modeleVV)
+print(resume_modeleVV_leaftk)
+
+#coefficient of linear regression
+plant_id_data_OF_VM <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VM")
+modeleVM <-  lm(mean_stomatal_area_um2 ~ mean_leaf_wetmass, data = plant_id_data_OF_VM)
+resume_modeleVM_leafwm<- summary(modeleVM)
+print(resume_modeleVM_leafwm)
+plant_id_data_OF_VV <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VV")
+modeleVV <-  lm(mean_stomatal_area_um2 ~ mean_leaf_wetmass, data = plant_id_data_OF_VV)
+resume_modeleVV_leafwm<- summary(modeleVV)
+print(resume_modeleVV_leafwm)
+
 ggsave(filename = paste0(fig_save, "/leaf_tradeoff_area.png"), plot = f_grid_leaf_area_tradeoff2, width = 10, height = 6, units = "in", dpi = 300)
 
 ggsave(filename = paste0(fig_save, "/thickness_tradeoff_area.png"), plot = f_grid_leaf_thickness_tradeoff2, width = 6, height = 6, units = "in", dpi = 300)
@@ -1336,6 +1485,8 @@ ggsave(filename = paste0(fig_save, "/wetmass_tradeoff_area.png"), plot = f_grid_
 ```
 
 growth condition :
+
+sd
 
 ```{r}
 # Créer le graphique avec les points et les barres d'erreur
@@ -1459,16 +1610,16 @@ f_grid_plant_air_T15cm2 <- plant_id_data_OF |>
 print(f_grid_plant_air_T15cm2)
 
 
-soil_join <- ggarrange(
-  f_grid_plant_soil_vwc2, f_grid_plant_soil_vwc12, f_grid_plant_soil_T2, f_grid_plant_soil_T12,
-  labels = c("a)", "b)", "c)", "d)"),
-  ncol = 2,
-  nrow = 2,
-  common.legend = TRUE,
-  font.label = list(size = 17, face = "bold")
-) 
+#soil_join <- ggarrange(
+#  f_grid_plant_soil_vwc2, f_grid_plant_soil_vwc12, f_grid_plant_soil_T2, f_grid_plant_soil_T12,
+#  labels = c("a)", "b)", "c)", "d)"),
+#  ncol = 2,
+#  nrow = 2,
+#  common.legend = TRUE,
+#  font.label = list(size = 17, face = "bold")
+#) 
 
-soil_join
+#soil_join
 
 #air_join <- ggarrange(
 #  f_grid_plant_air_T2cm2, f_grid_plant_air_T2cm12, f_grid_plant_air_FD2cm2, f_grid_plant_air_FD2cm12,
@@ -1481,6 +1632,64 @@ soil_join
 
 #air_join
 
+#coefficient of linear regression
+plant_id_data_OF_VM <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VM")
+modeleVM <-  lm(mean_stomatal_density ~ VWC.soil_0_15_cm.mean, data = plant_id_data_OF_VM)
+resume_modeleVM<- summary(modeleVM)
+print(resume_modeleVM)
+plant_id_data_OF_VV <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VV")
+modeleVV <-  lm(mean_stomatal_density ~ VWC.soil_0_15_cm.mean, data = plant_id_data_OF_VV)
+resume_modeleVV<- summary(modeleVV)
+print(resume_modeleVV)
+
+
+#coefficient of linear regression
+plant_id_data_OF_VM <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VM")
+modeleVM <-  lm(mean_stomatal_density ~ T.soil_8_cm.mean, data = plant_id_data_OF_VM)
+resume_modeleVM<- summary(modeleVM)
+print(resume_modeleVM)
+plant_id_data_OF_VV <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VV")
+modeleVV <-  lm(mean_stomatal_density ~ T.soil_8_cm.mean, data = plant_id_data_OF_VV)
+resume_modeleVV<- summary(modeleVV)
+print(resume_modeleVV)
+
+#coefficient of linear regression
+plant_id_data_OF_VM <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VM")
+modeleVM <-  lm(mean_stomatal_density ~ T.air_2_cm.mean, data = plant_id_data_OF_VM)
+resume_modeleVM<- summary(modeleVM)
+print(resume_modeleVM)
+plant_id_data_OF_VV <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VV")
+modeleVV <-  lm(mean_stomatal_density ~ T.air_2_cm.mean, data = plant_id_data_OF_VV)
+resume_modeleVV<- summary(modeleVV)
+print(resume_modeleVV)
+
+
+#coefficient of linear regression
+plant_id_data_OF_VM <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VM")
+modeleVM <-  lm(mean_stomatal_density ~ T.air_2_cm.frostdays, data = plant_id_data_OF_VM)
+resume_modeleVM<- summary(modeleVM)
+print(resume_modeleVM)
+plant_id_data_OF_VV <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VV")
+modeleVV <-  lm(mean_stomatal_density ~ T.air_2_cm.frostdays, data = plant_id_data_OF_VV)
+resume_modeleVV<- summary(modeleVV)
+print(resume_modeleVV)
+
 ggsave(filename = paste0(fig_save, "/Sd_VWC2.png"), plot = f_grid_plant_soil_vwc2, width = 10, height = 6, units = "in", dpi = 300)
 ggsave(filename = paste0(fig_save, "/Sd_Tsoil2.png"), plot = f_grid_plant_soil_T2, width = 10, height = 6, units = "in", dpi = 300)
 ggsave(filename = paste0(fig_save, "/Sd_Tsfrost2.png"), plot = f_grid_plant_soil_Frost2, width = 10, height = 6, units = "in", dpi = 300)
@@ -1488,8 +1697,206 @@ ggsave(filename = paste0(fig_save, "/Sd_Ta2cm2.png"), plot = f_grid_plant_air_T2
 ggsave(filename = paste0(fig_save, "/Sd_TaFd2cm2.png"), plot = f_grid_plant_air_FD2cm2, width = 10, height = 6, units = "in", dpi = 300)
 ggsave(filename = paste0(fig_save, "/Sd_Ta15cm2.png"), plot = f_grid_plant_air_T15cm2, width = 10, height = 6, units = "in", dpi = 300)
 
-ggsave(filename = paste0(fig_save, "/soil_comp.png"), plot = soil_join, width = 10, height = 12, units = "in", dpi = 300)
-ggsave(filename = paste0(fig_save, "/air_comp.png"), plot = air_join, width = 10, height = 12, units = "in", dpi = 300)
+#ggsave(filename = paste0(fig_save, "/soil_comp.png"), plot = soil_join, width = 10, height = 12, units = "in", dpi = 300)
+#ggsave(filename = paste0(fig_save, "/air_comp.png"), plot = air_join, width = 10, height = 12, units = "in", dpi = 300)
+```
+
+sa
+
+```{r}
+# Créer le graphique avec les points et les barres d'erreur
+f_grid_plant_soil_vwc2 <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |>
+  ggplot(aes(y = mean_stomatal_area_um2, x = VWC.soil_0_15_cm.mean, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+#  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal area (µm²)", x = "Volumetric water content")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
+# Afficher le graphique
+print(f_grid_plant_soil_vwc2)
+
+f_grid_plant_soil_T2 <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |>
+  ggplot(aes(y = mean_stomatal_area_um2, x = T.soil_8_cm.mean, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+#  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal area (µm²)", x = "Soil Temperature (°C)")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
+# Afficher le graphique
+print(f_grid_plant_soil_T2)
+
+f_grid_plant_soil_Frost2 <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |>
+  ggplot(aes(y = mean_stomatal_area_um2, x = T.soil_8_cm.frostdays, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+#  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal area (µm²)", x = "Number of frostdays")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
+# Afficher le graphique
+print(f_grid_plant_soil_Frost2)
+
+f_grid_plant_air_T2cm2 <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |>
+  ggplot(aes(y = mean_stomatal_area_um2, x = T.air_2_cm.mean, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+#  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal area (µm²)", x = "2cm Air Temperature (°C)")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
+# Afficher le graphique
+print(f_grid_plant_air_T2cm2)
+
+f_grid_plant_air_FD2cm2 <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |>
+  ggplot(aes(y = mean_stomatal_area_um2, x = T.air_2_cm.frostdays, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+#  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal area (µm²)", x = "Number of frostdays")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
+# Afficher le graphique
+print(f_grid_plant_air_FD2cm2)
+
+f_grid_plant_air_T15cm2 <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |>
+  ggplot(aes(y = mean_stomatal_area_um2, x = T.air_15_cm.mean, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+#  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal area (µm²)", x = "15cm Air Temperature (°C)")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
+print(f_grid_plant_air_T15cm2)
+
+sa_join <- ggarrange(
+  f_grid_plant_soil_vwc2, f_grid_plant_soil_T2,
+  labels = c("a)", "b)"),
+  ncol = 1,
+  nrow = 2,
+  common.legend = TRUE,
+  font.label = list(size = 17, face = "bold")
+) 
+
+sa_join
+
+
+#coefficient of linear regression
+plant_id_data_OF_VM <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VM")
+modeleVM <-  lm(mean_stomatal_area_um2 ~ VWC.soil_0_15_cm.mean, data = plant_id_data_OF_VM)
+resume_modeleVM<- summary(modeleVM)
+print(resume_modeleVM)
+plant_id_data_OF_VV <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VV")
+modeleVV <-  lm(mean_stomatal_area_um2 ~ VWC.soil_0_15_cm.mean, data = plant_id_data_OF_VV)
+resume_modeleVV<- summary(modeleVV)
+print(resume_modeleVV)
+
+
+#coefficient of linear regression
+plant_id_data_OF_VM <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VM")
+modeleVM <-  lm(mean_stomatal_area_um2 ~ T.soil_8_cm.mean, data = plant_id_data_OF_VM)
+resume_modeleVM<- summary(modeleVM)
+print(resume_modeleVM)
+plant_id_data_OF_VV <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VV")
+modeleVV <-  lm(mean_stomatal_area_um2 ~ T.soil_8_cm.mean, data = plant_id_data_OF_VV)
+resume_modeleVV<- summary(modeleVV)
+print(resume_modeleVV)
+
+#coefficient of linear regression
+plant_id_data_OF_VM <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VM")
+modeleVM <-  lm(mean_stomatal_area_um2 ~ T.air_2_cm.mean, data = plant_id_data_OF_VM)
+resume_modeleVM<- summary(modeleVM)
+print(resume_modeleVM)
+plant_id_data_OF_VV <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VV")
+modeleVV <-  lm(mean_stomatal_area_um2 ~ T.air_2_cm.mean, data = plant_id_data_OF_VV)
+resume_modeleVV<- summary(modeleVV)
+print(resume_modeleVV)
+
+
+#coefficient of linear regression
+plant_id_data_OF_VM <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VM")
+modeleVM <-  lm(mean_stomatal_area_um2 ~ T.air_2_cm.frostdays, data = plant_id_data_OF_VM)
+resume_modeleVM<- summary(modeleVM)
+print(resume_modeleVM)
+plant_id_data_OF_VV <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VV")
+modeleVV <-  lm(mean_stomatal_area_um2 ~ T.air_2_cm.frostdays, data = plant_id_data_OF_VV)
+resume_modeleVV<- summary(modeleVV)
+print(resume_modeleVV)
+
+ggsave(filename = paste0(fig_save, "/Sa_Tsoil2.png"), plot = f_grid_plant_soil_T2, width = 10, height = 6, units = "in", dpi = 300)
+ggsave(filename = paste0(fig_save, "/Sa_join.png"), plot = sa_join, width = 10, height = 12, units = "in", dpi = 300)
+
 ```
 
 growth variation
@@ -1595,6 +2002,21 @@ f_grid_plant_corT3 <- plant_id_data_OF |>
        color = 'Source de Température')
 
 print(f_grid_plant_corT3)
+
+
+#coefficient of linear regression
+plant_id_data_OF_VM <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VM")
+modeleVM <-  lm(sd_stomatal_density ~ VWC.soil_0_15_cm.sd, data = plant_id_data_OF_VM)
+resume_modeleVM<- summary(modeleVM)
+print(resume_modeleVM)
+plant_id_data_OF_VV <- plant_id_data_OF |> 
+  filter(!is.na(habitat)) |> 
+  filter(species == "VV")
+modeleVV <-  lm(sd_stomatal_density ~ VWC.soil_0_15_cm.sd, data = plant_id_data_OF_VV)
+resume_modeleVV<- summary(modeleVV)
+print(resume_modeleVV)
 ```
 
 ## Statistical analysis
@@ -1639,21 +2061,21 @@ SP_data_picture_OF$plant_id <- as.factor(SP_data_picture_OF$plant_id)
                 (1 | plant_id), data = data_species)
   
 
-  cat("**Stomatal density:**\n")
+  cat("**Stomatal density:**/n")
   print(shapiro.test(residuals(model1)))
   print(leveneTest(residuals(model1) ~ siteID, data = data_species))
-  cat("**Mean stomatal area:**\n")
+  cat("**Mean stomatal area:**/n")
   print(shapiro.test(residuals(model2)))
   print(leveneTest(residuals(model2) ~ siteID, data = data_species))
 
-  cat("**lmer results:**\n")
-  cat("**Stomatal density:**\n")
+  cat("**lmer results:**/n")
+  cat("**Stomatal density:**/n")
   print(summary(model1, correlation=TRUE))
-  cat("**Mean stomatal area:**\n")
+  cat("**Mean stomatal area:**/n")
   print(summary(model2, correlation=TRUE))
 
   # Correlations
-  cat("**Correlations:**\n")
+  cat("**Correlations:**/n")
   print(cor(data_species[, c("log_stomatal_density_p", "mean_stomatal_area_um2_p")]))
 
 ```
@@ -1691,34 +2113,34 @@ SP_data_picture_OF$plant_id <- as.factor(SP_data_picture_OF$plant_id)
                 (1 | siteID/plant_id/leaf_id) +
                 (1 | plant_id), data = data_species)
   
-  cat("**Stomatal density:**\n")
+  cat("**Stomatal density:**/n")
   print(shapiro.test(residuals(model1)))
   print(leveneTest(residuals(model1) ~ siteID, data = data_species))
-  cat("**Mean stomatal area:**\n")
+  cat("**Mean stomatal area:**/n")
   print(shapiro.test(residuals(model2)))
   print(leveneTest(residuals(model2) ~ siteID, data = data_species))
 
 
-  cat("**lmer results:**\n")
+  cat("**lmer results:**/n")
   print(summary(model1))
   print(summary(model2))
 
-cat("**post hoc test avec glht:**\n") 
+cat("**post hoc test avec glht:**/n") 
 glht_model1 <- glht(model1, linfct = mcp(siteID = "Tukey", habitat = "Tukey"))
 print(summary(glht_model1))
 glht_model2 <- glht(model2, linfct = mcp(siteID = "Tukey", habitat = "Tukey"))
 print(summary(glht_model2))
 
-cat("**post hoc test avec emms:**\n") 
-cat("**Stomatal density**\n") 
+cat("**post hoc test avec emms:**/n") 
+cat("**Stomatal density**/n") 
 emms1 <- emmeans(model1, ~ siteID * habitat)
 print(summary(emms1))
 print(pairs(emms1, adjust = "BH"))
-cat("**Stomatal area**\n") 
+cat("**Stomatal area**/n") 
 
 
   # Correlations
-  cat("**Correlations:**\n")
+  cat("**Correlations:**/n")
   print(cor.test(data_species$stomatal_density_p, data_species$mean_stomatal_area_um2_p))
 
 
@@ -1745,36 +2167,36 @@ species = "VV"
                 (1 | siteID/plant_id/leaf_id) +
                 (1 | plant_id), data = data_species)
   
-  cat("**Stomatal density:**\n")
+  cat("**Stomatal density:**/n")
   print(shapiro.test(residuals(model3)))
   print(leveneTest(residuals(model3) ~ siteID, data = data_species))
-  cat("**Mean stomatal area:**\n")
+  cat("**Mean stomatal area:**/n")
   print(shapiro.test(residuals(model4)))
   print(leveneTest(residuals(model4) ~ siteID, data = data_species))
 
 
-  cat("**lmer results:**\n")
+  cat("**lmer results:**/n")
   print(summary(model3))
   print(summary(model4))
  
-cat("**post hoc test:**\n") 
+cat("**post hoc test:**/n") 
 glht_model3 <- glht(model3, linfct = mcp(siteID = "Tukey", habitat = "Tukey"))
 print(summary(glht_model3))
 glht_model4 <- glht(model4, linfct = mcp(siteID = "Tukey", habitat = "Tukey"))
 print(summary(glht_model4))
   
-cat("**post hoc test avec emms:**\n") 
-cat("**Stomatal density:**\n") 
+cat("**post hoc test avec emms:**/n") 
+cat("**Stomatal density:**/n") 
 emms3 <- emmeans(model3, ~ siteID * habitat)
 print(summary(emms3))
 print(pairs(emms3, adjust = "BH"))
-cat("**Stomatal area**\n") 
+cat("**Stomatal area**/n") 
 emms4 <- emmeans(model4, ~ siteID * habitat)
 print(summary(emms4))
 print(pairs(emms4, adjust = "BH"))
 
   # Correlations
-  cat("**Correlations:**\n")
+  cat("**Correlations:**/n")
   print(cor.test(data_species$stomatal_density_p, data_species$mean_stomatal_area_um2_p))
   
 ```
@@ -1806,34 +2228,34 @@ species <- "VM"
   model2 <- aov(mean_stomatal_area_um2 ~ habitat * siteID, data = data_species)
   
   # Vérification de la normalité des résidus
-  cat("**Espèce :**", species, "\n")
-  cat("**Densité stomatique :**\n")
+  cat("**Espèce :**", species, "/n")
+  cat("**Densité stomatique :**/n")
   shapiro.test(residuals(model1))
-  cat("**Aire stomatique moyenne :**\n")
+  cat("**Aire stomatique moyenne :**/n")
   shapiro.test(residuals(model2))
 
   # Post-hoc (si ANOVA significative)
-  cat("**Résultats de l'ANOVA :**\n")
+  cat("**Résultats de l'ANOVA :**/n")
   print(summary(model1))
   print(summary(model2))
   if(summary(model1)[[1]]$Pr[1] < 0.05) {
-    cat("Comparaison multiple pour la densité stomatique : \n")
+    cat("Comparaison multiple pour la densité stomatique : /n")
     print(TukeyHSD(model1))
   }
   if(summary(model2)[[1]]$Pr[1] < 0.05) {
-    cat("Comparaison multiple pour l'aire stomatique moyenne : \n")
+    cat("Comparaison multiple pour l'aire stomatique moyenne : /n")
     print(TukeyHSD(model2))
   }
 
   # Corrélations
-  cat("**Corrélations clim :**\n")
+  cat("**Corrélations clim :**/n")
   data_cor <- data_species |> 
     select(mean_stomatal_density, mean_stomatal_area_um2, sd_stomatal_density, sd_stomatal_area_um2, T.air_15_cm.mean, T.air_2_cm.mean, T.soil_8_cm.mean, VWC.soil_0_15_cm.mean, T.air_15_cm.drange, T.air_2_cm.drange, T.soil_8_cm.drange, VWC.soil_0_15_cm.sd)|> 
     filter(!is.na(sd_stomatal_density)) |> 
     filter(!is.na(T.air_15_cm.mean))
   cor_clim_VM <- (cor(data_cor))
 
-     cat("**Corrélations leaf :**\n")
+     cat("**Corrélations leaf :**/n")
   data_cor <- data_species |> 
     select(mean_stomatal_density, mean_stomatal_area_um2, sd_stomatal_density, sd_stomatal_area_um2, T.air_15_cm.mean, T.air_2_cm.mean, T.soil_8_cm.mean, VWC.soil_0_15_cm.mean, T.air_15_cm.drange, T.air_2_cm.drange, T.soil_8_cm.drange, VWC.soil_0_15_cm.sd,
                                mean_leaf_area, mean_leaf_thickness, mean_leaf_wetmass) |>  
@@ -1858,34 +2280,34 @@ species <- "VV"
   model2 <- aov(mean_stomatal_area_um2 ~ habitat * siteID, data = data_species)
   
   # Vérification de la normalité des résidus
-  cat("**Espèce :**", species, "\n")
-  cat("**Densité stomatique :**\n")
+  cat("**Espèce :**", species, "/n")
+  cat("**Densité stomatique :**/n")
   shapiro.test(residuals(model1))
-  cat("**Aire stomatique moyenne :**\n")
+  cat("**Aire stomatique moyenne :**/n")
   shapiro.test(residuals(model2))
 
   # Post-hoc (si ANOVA significative)
-  cat("**Résultats de l'ANOVA :**\n")
+  cat("**Résultats de l'ANOVA :**/n")
   print(summary(model1))
   print(summary(model2))
   if(summary(model1)[[1]]$Pr[1] < 0.05) {
-    cat("Comparaison multiple pour la densité stomatique : \n")
+    cat("Comparaison multiple pour la densité stomatique : /n")
     print(TukeyHSD(model1))
   }
   if(summary(model2)[[1]]$Pr[1] < 0.05) {
-    cat("Comparaison multiple pour l'aire stomatique moyenne : \n")
+    cat("Comparaison multiple pour l'aire stomatique moyenne : /n")
     print(TukeyHSD(model2))
   }
 
   # Corrélations
-  cat("**Corrélations clim :**\n")
+  cat("**Corrélations clim :**/n")
   data_cor <- data_species |> 
     select(mean_stomatal_density, mean_stomatal_area_um2, sd_stomatal_density, sd_stomatal_area_um2, T.air_15_cm.mean, T.air_2_cm.mean, T.soil_8_cm.mean, VWC.soil_0_15_cm.mean, T.air_15_cm.drange, T.air_2_cm.drange, T.soil_8_cm.drange, VWC.soil_0_15_cm.sd)|> 
         filter(!is.na(sd_stomatal_density)) |> 
     filter(!is.na(T.air_15_cm.mean))
   cor_clim_VV <- (cor(data_cor))
 
-    cat("**Corrélations leaf :**\n")
+    cat("**Corrélations leaf :**/n")
   data_cor <- data_species |> 
     select(mean_stomatal_density, mean_stomatal_area_um2, sd_stomatal_density, sd_stomatal_area_um2, T.air_15_cm.mean, T.air_2_cm.mean, T.soil_8_cm.mean, VWC.soil_0_15_cm.mean, T.air_15_cm.drange, T.air_2_cm.drange, T.soil_8_cm.drange, VWC.soil_0_15_cm.sd,
                                mean_leaf_area, mean_leaf_thickness, mean_leaf_wetmass) |> 

@@ -57,6 +57,7 @@ library(lmerTest)
 library(officer)
 library(myClim)
 library(cowplot)
+library(ggpubr)
 ```
 
 ### Importing metadata from the TOMST loggers files
@@ -73,7 +74,7 @@ metadata <- metadata |>
   arrange(metadata[, loggerIDColumn])
 
 # Sélectionner un dossier à traiter
-folder_path <- "C:/Users/Touriere/Desktop/GEN/4A/SIRD/Data/TOMST_loggers_data/DURIN_all"
+folder_path <- "D:/Utilisateurs/Touriere/Documents/GEN/4A/SIRD/Data/TOMST_loggers_data/DURIN_all"
 #SO/Sogndal_31.05.2024"      
 
 
@@ -474,10 +475,10 @@ tms.snow <- active_metadata |>
             last_day = mean.Date(last_day, na.rm = TRUE))
  
 temp_env_all  <-tms |> 
-  mc_env_temp(period = "day", min_coverage = 0.9) |> 
+  mc_env_temp(period = "week", min_coverage = 0.9) |> 
   filter(value >= -30 & value <= 50)
 
-moist_env_all <- mc_env_moist(tms.all.calc, period = "day", min_coverage = 0.9)
+moist_env_all <- mc_env_moist(tms.all.calc, period = "week", min_coverage = 0.9)
 snow_all <- tms.all.calc |> 
     mc_reshape_long() |> 
   filter(sensor_name == "snow")
@@ -487,10 +488,13 @@ snow_all <- tms.all.calc |>
 Plot comparison
 
 ```{r}
+active_metadata$site <- factor(active_metadata$site, levels = c("Kautokeino", "Senja", "Sogndal", "Lygra"))
+
 temp.soil.mean.all <- temp_env_all |> 
   filter(sensor_name == "T.soil_8_cm.mean") |> #T.air_15_cm.mean
     select("loggerID" = locality_id, sensor_name, datetime, "temp_mean_soil" = value) 
 temp.soil.mean.all$loggerID = as.numeric(temp.soil.mean.all$loggerID)
+
 
 temp.soil.mean.all <- active_metadata |> 
   select(loggerID, site, "habitat" = land_type) |> 
@@ -593,7 +597,18 @@ f_line_macro_1 <-ggplot(moist.mean.all, aes(x = datetime, y = mean.moist, color 
   labs(#title = "Average Soil Moisture Over Time",
        x = "Date",
        y = "Weekly Average Soil Volumetric Water Content",
-       color = "Site")
+       color = "Site") +
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) +
+   theme(legend.position = "bottom")
+
 print(f_line_macro_1)
 
 f_line_macro_2 <-ggplot(temp.mean.all, aes(x = datetime, y = mean.temp.air, color = site)) +
@@ -601,7 +616,18 @@ f_line_macro_2 <-ggplot(temp.mean.all, aes(x = datetime, y = mean.temp.air, colo
   labs(#title = "Average air temperature Over Time",
        x = "Date",
        y = "Weekly Average Air (15cm) Temperature (°C)",
-       color = "Site")
+       color = "Site")+
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) +
+   theme(legend.position = "bottom")
+
 print(f_line_macro_2)
 
  plot_grid(f_line_macro_1, f_line_macro_2, ncol = 1)
@@ -613,7 +639,18 @@ print(f_line_macro_2)
        x = "Date",
        y = "Weekly Average Soil Solumetric Water Sontent",
        color = "Habitat")+
+   theme(legend.position = "bottom")+
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) +
    theme(legend.position = "bottom")
+
 print(f_line_micro_1)
 
 f_line_micro_2 <-ggplot(temp.mean.all.hab, aes(x = datetime, y = mean.temp.air.hab, color = habitat)) +
@@ -623,7 +660,17 @@ f_line_micro_2 <-ggplot(temp.mean.all.hab, aes(x = datetime, y = mean.temp.air.h
        x = "Date",
        y = "Weekly Average Air (15cm) Temperature (°C)",
        color = "Habitat")+
-   theme(legend.position = "bottom")
+   theme(legend.position = "bottom")+
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
 print(f_line_micro_2)
 
  plot_grid(f_line_micro_1, f_line_micro_2, ncol = 1)
@@ -646,7 +693,17 @@ f_line_micro_3 <-ggplot(snow.mean.all, aes(x = datetime, y = snow.hab))+
   facet_wrap(~ site) +
   labs(#title = "Average air temperature Over Time",
        x = "Date",
-       y = "snow cover")
+       y = "snow cover")+
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
 print(f_line_micro_3)
 
 
@@ -724,7 +781,17 @@ f_line_micro_4 <- ggplot() +
   theme(legend.position = "bottom")+
   scale_color_manual(
     values = c("Growing Degree Day (>5°C)" = "green", "Freezing Degree Day (<0°C)" = "blue")
-  )
+  )+
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
 print(f_line_micro_4)
 
 
@@ -749,7 +816,17 @@ f_histo_micro <- ggplot() +
   )+
   scale_fill_manual(
     values = c("Growing Day (>5°C)" = "green", "Freezing Day (<0°C)" = "blue")
+  ) +
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
   ) 
+
 
 
 print(f_histo_micro)
@@ -770,8 +847,46 @@ f_line_micro_5 <- ggplot() +
     x = "Date",
     y = "Sum of temperature (°C)",
     color = "Site"
-  )
+  )+
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
 print(f_line_micro_5)
+
+fig_save <- "D:/Utilisateurs/Touriere/Documents/GEN/4A/SIRD/Rapport/Images/R"
+
+join_macro <- ggarrange(
+  f_line_macro_1, f_line_macro_2,
+  labels = c("a)", "b)"),
+  ncol = 1,
+  nrow = 2,
+  common.legend = TRUE,
+  font.label = list(size = 17, face = "bold")
+) 
+
+join_macro
+
+ggsave(filename = paste0(fig_save, "/macro_comp.png"), plot = join_macro, width = 10, height = 12, units = "in", dpi = 300)
+
+join_micro <- ggarrange(
+  f_line_micro_1, f_line_micro_2,
+  labels = c("a)", "b)"),
+  ncol = 1,
+  nrow = 2,
+  common.legend = TRUE,
+  font.label = list(size = 17, face = "bold")
+) 
+
+join_micro
+
+ggsave(filename = paste0(fig_save, "/micro_comp.png"), plot = join_micro, width = 10, height = 12, units = "in", dpi = 300)
 ```
 
 ## Lygra
