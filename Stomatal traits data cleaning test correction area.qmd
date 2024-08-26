@@ -25,7 +25,7 @@ library(googlesheets4)
 library(imager)
 library(jsonlite)
 library(myClim)
-
+library(ggpmisc)
 
 #local import (without internet)
 #field_data <-  read.csv(file = here("Fieldwork_spreadsheet.csv"),dec = ",")
@@ -114,99 +114,197 @@ tms <- mc_read_data(files_table = path_data,
 tms <- mc_join(tms)
 
 tms_info <- mc_info_clean(tms)
-#tms_info$start_date = tms_info$end_date %m-% months(2)
-tms_info$start_date = tms_info$end_date %m-% months(12)
+tms_info2$start_date = tms_info$end_date %m-% months(2)
+tms_info12$start_date = tms_info$end_date %m-% months(12)
 
 # Start and end are list 
 #start <-  as.POSIXct(as.Date(active_metadata$date_in, format = "%d/%m/%Y"), tz = "UTC")
-start_t <- tms_info$start_date
+start_t2 <- tms_info2$start_date
+start_t12 <- tms_info12$start_date
 # we choose this date to have the same data for all TMS loggers
 
 localities = as.vector(names(tms$localities))
 
-tms <- mc_prep_crop(tms, start = start_t, end = NULL, localities)
-tms.info <- mc_info_clean(tms)
+tms2 <- mc_prep_crop(tms, start = start_t2, end = NULL, localities)
+tms12 <- mc_prep_crop(tms, start = start_t12, end = NULL, localities)
 
-tms.all.calc <- mc_calc_vwc(tms, soiltype = "universal") #reseach on soiltype and TOMST VERSION
-temp_env_all  <-tms |> 
+
+tms.all.calc2 <- mc_calc_vwc(tms2, soiltype = "universal") #reseach on soiltype and TOMST VERSION
+temp_env_all2  <-tms2 |> 
   mc_env_temp(period = "day", min_coverage = 0.1) |> 
   filter(value >= -30 & value <= 50)
-temp_env_all$locality_id = as.numeric(temp_env_all$locality_id)
+temp_env_all2$locality_id = as.numeric(temp_env_all2$locality_id)
 
-moist_env_all <- mc_env_moist(tms.all.calc, period = "day", min_coverage = 0.1)
-moist_env_all$locality_id = as.numeric(moist_env_all$locality_id)
+moist_env_all2 <- mc_env_moist(tms.all.calc2, period = "day", min_coverage = 0.1)
+moist_env_all2$locality_id = as.numeric(moist_env_all2$locality_id)
 
-VWC.soil_0_15_cm.mean <- moist_env_all |> 
+tms.all.calc12 <- mc_calc_vwc(tms12, soiltype = "universal") #reseach on soiltype and TOMST VERSION
+temp_env_all12  <-tms12 |> 
+  mc_env_temp(period = "day", min_coverage = 0.1) |> 
+  filter(value >= -30 & value <= 50)
+temp_env_all12$locality_id = as.numeric(temp_env_all12$locality_id)
+
+moist_env_all12 <- mc_env_moist(tms.all.calc12, period = "day", min_coverage = 0.1)
+moist_env_all12$locality_id = as.numeric(moist_env_all12$locality_id)
+
+#2 month value 
+
+VWC.soil_0_15_cm.mean2 <- moist_env_all2 |> 
   filter(sensor_name == "VWC.soil_0_15_cm.mean") |> 
   group_by(locality_id) |> 
   summarise(VWC.soil_0_15_cm.mean = mean(value, na.rm = TRUE)) |> 
   ungroup() |> 
   select("loggerID" = locality_id, VWC.soil_0_15_cm.mean) 
 
-VWC.soil_0_15_cm.sd <- moist_env_all |> 
+VWC.soil_0_15_cm.sd2 <- moist_env_all2 |> 
   filter(sensor_name == "VWC.soil_0_15_cm.sd") |> 
   group_by(locality_id) |> 
   summarise(VWC.soil_0_15_cm.sd = mean(value, na.rm = TRUE)) |> 
   ungroup() |> 
   select("loggerID" = locality_id, VWC.soil_0_15_cm.sd) 
 
-T.soil_8_cm.mean <- temp_env_all |> 
+T.soil_8_cm.mean2 <- temp_env_all2 |> 
   filter(sensor_name == "T.soil_8_cm.mean") |> 
   group_by(locality_id) |> 
   summarise(T.soil_8_cm.mean = mean(value, na.rm = TRUE)) |> 
   ungroup() |> 
   select("loggerID" = locality_id, T.soil_8_cm.mean) 
 
-T.soil_8_cm.drange <- temp_env_all |> 
+T.soil_8_cm.drange2 <- temp_env_all2 |> 
   filter(sensor_name == "T.soil_8_cm.drange") |>
   group_by(locality_id) |> 
   summarise(T.soil_8_cm.drange = mean(value, na.rm = TRUE)) |> 
   ungroup() |> 
   select("loggerID" = locality_id, T.soil_8_cm.drange) 
 
-T.soil_8_cm.frostdays <- temp_env_all |> 
+T.soil_8_cm.frostdays2 <- temp_env_all2 |> 
   filter(sensor_name == "T.soil_8_cm.frostdays") |> 
   group_by(locality_id) |> 
   summarise(T.soil_8_cm.frostdays = sum(value, na.rm = TRUE)) |> 
   ungroup() |> 
   select("loggerID" = locality_id, T.soil_8_cm.frostdays)
 
-T.air_2_cm.mean <- temp_env_all |> 
+T.air_2_cm.mean2 <- temp_env_all2 |> 
   filter(sensor_name == "T.air_2_cm.mean") |>
   group_by(locality_id) |> 
   summarise(T.air_2_cm.mean = mean(value, na.rm = TRUE)) |> 
   ungroup() |> 
   select("loggerID" = locality_id, T.air_2_cm.mean)
 
-T.air_2_cm.drange <- temp_env_all |> 
+T.air_2_cm.drange2 <- temp_env_all2 |> 
   filter(sensor_name == "T.air_2_cm.drange") |>
   group_by(locality_id) |> 
   summarise(T.air_2_cm.drange = mean(value, na.rm = TRUE)) |> 
   ungroup() |> 
   select("loggerID" = locality_id, T.air_2_cm.drange) 
 
-T.air_2_cm.frostdays <- temp_env_all |> 
+T.air_2_cm.frostdays2 <- temp_env_all2 |> 
   filter(sensor_name == "T.air_2_cm.frostdays") |> 
   group_by(locality_id) |> 
   summarise(T.air_2_cm.frostdays = sum(value, na.rm = TRUE)) |> 
   ungroup() |> 
   select("loggerID" = locality_id, T.air_2_cm.frostdays)
 
-T.air_15_cm.mean <- temp_env_all |> 
+T.air_15_cm.mean2 <- temp_env_all2 |> 
   filter(sensor_name == "T.air_15_cm.mean") |> 
   group_by(locality_id) |> 
   summarise(T.air_15_cm.mean = mean(value, na.rm = TRUE)) |> 
   ungroup() |> 
   select("loggerID" = locality_id, T.air_15_cm.mean)
 
-T.air_15_cm.drange <- temp_env_all |> 
+T.air_15_cm.drange2 <- temp_env_all2 |> 
   filter(sensor_name == "T.air_15_cm.drange") |> 
   group_by(locality_id) |> 
   summarise(T.air_15_cm.drange = mean(value, na.rm = TRUE)) |> 
   ungroup() |> 
   select("loggerID" = locality_id, T.air_15_cm.drange)
 
-TOMST_data <- TOMST_data |>
+TOMST_data2 <- TOMST_data |>
+  left_join(VWC.soil_0_15_cm.mean, by = "loggerID") |>
+  left_join(VWC.soil_0_15_cm.sd, by = "loggerID") |>
+  left_join(T.soil_8_cm.mean, by = "loggerID") |>
+  left_join(T.soil_8_cm.drange, by = "loggerID") |>
+  left_join(T.soil_8_cm.frostdays, by = "loggerID") |>
+  left_join(T.air_2_cm.mean, by = "loggerID") |>
+  left_join(T.air_2_cm.frostdays, by = "loggerID") |>
+  left_join(T.air_2_cm.drange, by = "loggerID") |>
+  left_join(T.air_15_cm.mean, by = "loggerID") |>
+  left_join(T.air_15_cm.drange, by = "loggerID") |> 
+  rename(siteID = site)
+
+#12 month value 
+
+VWC.soil_0_15_cm.mean12 <- moist_env_all12 |> 
+  filter(sensor_name == "VWC.soil_0_15_cm.mean") |> 
+  group_by(locality_id) |> 
+  summarise(VWC.soil_0_15_cm.mean = mean(value, na.rm = TRUE)) |> 
+  ungroup() |> 
+  select("loggerID" = locality_id, VWC.soil_0_15_cm.mean) 
+
+VWC.soil_0_15_cm.sd12 <- moist_env_all12 |> 
+  filter(sensor_name == "VWC.soil_0_15_cm.sd") |> 
+  group_by(locality_id) |> 
+  summarise(VWC.soil_0_15_cm.sd = mean(value, na.rm = TRUE)) |> 
+  ungroup() |> 
+  select("loggerID" = locality_id, VWC.soil_0_15_cm.sd) 
+
+T.soil_8_cm.mean12 <- temp_env_all12 |> 
+  filter(sensor_name == "T.soil_8_cm.mean") |> 
+  group_by(locality_id) |> 
+  summarise(T.soil_8_cm.mean = mean(value, na.rm = TRUE)) |> 
+  ungroup() |> 
+  select("loggerID" = locality_id, T.soil_8_cm.mean) 
+
+T.soil_8_cm.drange12 <- temp_env_all12 |> 
+  filter(sensor_name == "T.soil_8_cm.drange") |>
+  group_by(locality_id) |> 
+  summarise(T.soil_8_cm.drange = mean(value, na.rm = TRUE)) |> 
+  ungroup() |> 
+  select("loggerID" = locality_id, T.soil_8_cm.drange) 
+
+T.soil_8_cm.frostdays12 <- temp_env_all12 |> 
+  filter(sensor_name == "T.soil_8_cm.frostdays") |> 
+  group_by(locality_id) |> 
+  summarise(T.soil_8_cm.frostdays = sum(value, na.rm = TRUE)) |> 
+  ungroup() |> 
+  select("loggerID" = locality_id, T.soil_8_cm.frostdays)
+
+T.air_2_cm.mean12 <- temp_env_all12 |> 
+  filter(sensor_name == "T.air_2_cm.mean") |>
+  group_by(locality_id) |> 
+  summarise(T.air_2_cm.mean = mean(value, na.rm = TRUE)) |> 
+  ungroup() |> 
+  select("loggerID" = locality_id, T.air_2_cm.mean)
+
+T.air_2_cm.drange12 <- temp_env_all12 |> 
+  filter(sensor_name == "T.air_2_cm.drange") |>
+  group_by(locality_id) |> 
+  summarise(T.air_2_cm.drange = mean(value, na.rm = TRUE)) |> 
+  ungroup() |> 
+  select("loggerID" = locality_id, T.air_2_cm.drange) 
+
+T.air_2_cm.frostdays12 <- temp_env_all12 |> 
+  filter(sensor_name == "T.air_2_cm.frostdays") |> 
+  group_by(locality_id) |> 
+  summarise(T.air_2_cm.frostdays = sum(value, na.rm = TRUE)) |> 
+  ungroup() |> 
+  select("loggerID" = locality_id, T.air_2_cm.frostdays)
+
+T.air_15_cm.mean12 <- temp_env_all12 |> 
+  filter(sensor_name == "T.air_15_cm.mean") |> 
+  group_by(locality_id) |> 
+  summarise(T.air_15_cm.mean = mean(value, na.rm = TRUE)) |> 
+  ungroup() |> 
+  select("loggerID" = locality_id, T.air_15_cm.mean)
+
+T.air_15_cm.drange12 <- temp_env_all12 |> 
+  filter(sensor_name == "T.air_15_cm.drange") |> 
+  group_by(locality_id) |> 
+  summarise(T.air_15_cm.drange = mean(value, na.rm = TRUE)) |> 
+  ungroup() |> 
+  select("loggerID" = locality_id, T.air_15_cm.drange)
+
+TOMST_data12 <- TOMST_data |>
   left_join(VWC.soil_0_15_cm.mean, by = "loggerID") |>
   left_join(VWC.soil_0_15_cm.sd, by = "loggerID") |>
   left_join(T.soil_8_cm.mean, by = "loggerID") |>
@@ -223,7 +321,7 @@ TOMST_data <- TOMST_data |>
 ## Stomatal analysis
 
 ```{r}
-rm(list = setdiff(ls(), c("PV_data", "SP_data", "cond_data","leaf_trait_data", "TOMST_data")))
+rm(list = setdiff(ls(), c("PV_data", "SP_data", "cond_data","leaf_trait_data", "TOMST_data", "TOMST_data2", "TOMST_data12")))
 ```
 
 Calculation of the stomatal traits
@@ -695,33 +793,47 @@ plant_id_data <- plant_id_density_mean |>
 Environment cleaning :
 
 ```{r}
-rm(list = setdiff(ls(), c("PV_data", "SP_data", "cond_data","leaf_trait_data", "cond_data", "cond_data_r", "filtered_data", "habitat_density_mean", "habitat_stomata_surface", "leaf_id_density_mean", "leaf_id_density_mean_clean", "leaf_trait_data_join", "plant_id_data", "sp_data", "SP_data_photo_id", "SP_data_picture", "stomatal_conductance_mean", "stomatal_errorbar", "violating_envelope_IDs", "TOMST_data", "SP_data_density")))
+rm(list = setdiff(ls(), c("PV_data", "SP_data", "cond_data","leaf_trait_data", "cond_data", "cond_data_r", "filtered_data", "habitat_density_mean", "habitat_stomata_surface", "leaf_id_density_mean", "leaf_id_density_mean_clean", "leaf_trait_data_join", "plant_id_data", "sp_data", "SP_data_photo_id", "SP_data_picture", "stomatal_conductance_mean", "stomatal_errorbar", "violating_envelope_IDs", "TOMST_data2", "TOMST_data12", "SP_data_density")))
 
 ```
 
 filtering
 
 ```{r}
-plant_id_data <- plant_id_data |> 
+plant_id_data2 <- plant_id_data |> 
   select(plant_id, siteID, habitat, mean_stomatal_density, sd_stomatal_density, mean_stomatal_area_um2, "sd_stomatal_area_um2" = sd_area_um2, mean_leaf_area, sd_leaf_area, mean_leaf_thickness, sd_leaf_thickness,
                    mean_leaf_wetmass, sd_leaf_wetmass, plant_mean_height) |> 
-  left_join(select(TOMST_data, -siteID, -habitat), by = join_by(plant_id)) |>
+  left_join(select(TOMST_data2, -siteID, -habitat), by = join_by(plant_id)) |>
   left_join(select(SP_data,
             plant_id, species, stomatal_conductance_mean_p, stomatal_conductance_min, stomatal_conductance_max),
             by = join_by(plant_id))
   
 
-plant_id_data_OF <-filter(plant_id_data, habitat %in% c("Open", "Forested")) |> 
+plant_id_data_OF2 <-filter(plant_id_data2, habitat %in% c("Open", "Forested")) |> 
    mutate(siteID = ifelse(siteID == "Senje", "Senja", siteID))
-plant_id_data_OF$siteID <- factor(plant_id_data_OF$siteID, levels = c("Kautokeino", "Senja", "Sogndal", "Lygra"))
-plant_id_data_DN <-filter(plant_id_data, !habitat %in% c("Open", "Forested"))
-plant_id_data_LY_O<- plant_id_data |> 
+plant_id_data_OF$siteID <- factor(plant_id_data_OF$siteID, levels = c("Senja", "Kautokeino", "Lygra","Sogndal"))
+
+plant_id_data12 <- plant_id_data |> 
+  select(plant_id, siteID, habitat, mean_stomatal_density, sd_stomatal_density, mean_stomatal_area_um2, "sd_stomatal_area_um2" = sd_area_um2, mean_leaf_area, sd_leaf_area, mean_leaf_thickness, sd_leaf_thickness,
+                   mean_leaf_wetmass, sd_leaf_wetmass, plant_mean_height) |> 
+  left_join(select(TOMST_data12, -siteID, -habitat), by = join_by(plant_id)) |>
+  left_join(select(SP_data,
+            plant_id, species, stomatal_conductance_mean_p, stomatal_conductance_min, stomatal_conductance_max),
+            by = join_by(plant_id))
+  
+
+plant_id_data_OF12 <-filter(plant_id_data12, habitat %in% c("Open", "Forested")) |> 
+   mutate(siteID = ifelse(siteID == "Senje", "Senja", siteID))
+plant_id_data_OF$siteID <- factor(plant_id_data_OF$siteID, levels = c("Senja", "Kautokeino", "Lygra","Sogndal"))
+
+plant_id_data_DN <-filter(plant_id_data2, !habitat %in% c("Open", "Forested"))
+plant_id_data_LY_O<- plant_id_data2 |> 
   filter(siteID == "Lygra") |> 
   filter(habitat != "Forested")
 
 SP_data_picture_OF <-filter(SP_data_picture, habitat %in% c("Open", "Forested"))|> 
    mutate(siteID = ifelse(siteID == "Senje", "Senja", siteID))
-SP_data_picture_OF$siteID <- factor(SP_data_picture_OF$siteID, levels = c("Kautokeino", "Senja", "Sogndal", "Lygra"))
+SP_data_picture_OF$siteID <- factor(SP_data_picture_OF$siteID, levels = c("Senja", "Kautokeino", "Lygra","Sogndal"))
 
 SP_data_picture_DN <-filter(SP_data_picture, !habitat %in% c("Open", "Forested"))
 SP_data_picture_LY_O<- SP_data_picture |> 
@@ -754,7 +866,7 @@ Sd_VV <- SP_data_picture_OF |>
          Sa_min = Sa_mean - Sa_sd, Sa_max = Sa_mean + Sa_sd) |> 
   mutate(species = "VV")
 
-fig_save <- "D:/Utilisateurs/Touriere/Documents/GEN/4A/SIRD/Rapport/Images/R"
+fig_save <- "D:/Utilisateurs/Touriere/Documents/GEN/4A/SIRD/Rapport/Images/R/new"
 
 
 
@@ -827,6 +939,9 @@ p_jit_join <- ggarrange(
 ) 
 
 p_jit_join
+
+
+
 
 # Enregistrez le graphique avec ggsave()
 ggsave(filename = paste0(fig_save, "/species_comp.png"), plot = p_jit_join, width = 10, height = 6, units = "in", dpi = 300)
@@ -947,9 +1062,15 @@ print(f_grid_stomatal_area)
 
 # Créer le graphique avec les points et les barres d'erreur
 f_grid_stomatal_tradeoff <- ggplot(SP_data_picture_OF, aes(x = mean_stomatal_area_um2_p, y = stomatal_density_p, color = species)) +
-  geom_point(aes(shape = species), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
-  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
- # geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2, position = position_dodge(width = 0.75)) + # Ajoute des barres d'erreur
+  geom_point(aes(shape = species), size = 3) +
+  geom_smooth(aes(color = species), method = "lm") +
+  stat_poly_eq(aes(label = paste(..eq.label.., ..adj.rr.label.., ..p.value.label.., sep = "~~~")), 
+               formula = y ~ x, 
+               parse = TRUE, 
+               coef.digits = 2,  # Limite le nombre de chiffres significatifs pour les coefficients
+               rr.digits = 2,    # Limite le nombre de chiffres significatifs pour R²
+               p.digits = 2,
+               size = 2)+   # Limite le nombre de chiffres significatifs pour la p-value
   facet_grid(. ~ siteID) + # Crée des facettes pour chaque site
   labs(x = "Stomatal Area (µm²)", y = "Stomatal Density (stomata / mm²)") + 
   theme(
@@ -965,11 +1086,33 @@ f_grid_stomatal_tradeoff <- ggplot(SP_data_picture_OF, aes(x = mean_stomatal_are
 # Afficher le graphique
 print(f_grid_stomatal_tradeoff)
 
+# Ajuster et résumer le modèle linéaire pour chaque espèce
+model_summaries <- SP_data_picture_OF %>%
+  group_by(species) %>%
+  summarize(
+    model = list(lm(stomatal_density_p ~ mean_stomatal_area_um2_p, data = cur_data()))
+  ) %>%
+  mutate(summary = lapply(model, summary))
+
+# Afficher species, siteID, et le résumé du modèle
+for (i in 1:nrow(model_summaries)) {
+  cat("Species:", model_summaries$species[i], "\n")
+  print(model_summaries$summary[[i]])
+  cat("\n-----------------\n")
+}
+
 
 # Créer le graphique avec les points et les barres d'erreur
 f_grid_stomatal_tradeoff2 <- ggplot(SP_data_picture_OF, aes(x = mean_stomatal_area_um2_p, y = stomatal_density_p, color = species)) +
   geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
   geom_smooth(aes(color = species), method = "lm") +
+  stat_poly_eq(aes(label = paste(..eq.label.., ..adj.rr.label.., ..p.value.label.., sep = "~~~")), 
+               formula = y ~ x, 
+               parse = TRUE, 
+               coef.digits = 2,  # Limite le nombre de chiffres significatifs pour les coefficients
+               rr.digits = 2,    # Limite le nombre de chiffres significatifs pour R²
+               p.digits = 2,
+               size = 2) +   # Limite le nombre de chiffres significatifs pour la p-value
   labs(x = "Stomatal Area (µm²)", y = "Stomatal Density (stomata / mm²)") + 
   theme(
     axis.title.x = element_text(size = 14), 
@@ -1027,6 +1170,18 @@ habitat_join <- ggarrange(
 
 habitat_join
 
+tradeoff_join <- ggarrange(
+  f_grid_stomatal_tradeoff2, f_grid_stomatal_tradeoff,
+  labels = c("a)", "b)"),
+  ncol = 1,
+  
+  common.legend = TRUE,
+  font.label = list(size = 17, face = "bold")
+) 
+
+
+tradeoff_join
+
 ggsave(filename = paste0(fig_save, "/site_comp.png"), plot = site_join, width = 10, height = 12, units = "in", dpi = 300)
 
 ggsave(filename = paste0(fig_save, "/habitat_comp.png"), plot = habitat_join, width = 10, height = 12, units = "in", dpi = 300)
@@ -1034,6 +1189,7 @@ ggsave(filename = paste0(fig_save, "/habitat_comp.png"), plot = habitat_join, wi
 
 ggsave(filename = paste0(fig_save, "/habitat_tradeoff.png"), plot = f_grid_stomatal_tradeoff, width = 10, height = 6, units = "in", dpi = 300)
 
+ggsave(filename = paste0(fig_save, "/tradeoff_join.png"), plot = tradeoff_join, width = 10, height = 12, units = "in", dpi = 300)
 ```
 
 plot with conductance
@@ -1490,7 +1646,7 @@ sd
 
 ```{r}
 # Créer le graphique avec les points et les barres d'erreur
-f_grid_plant_soil_vwc2 <- plant_id_data_OF |> 
+f_grid_plant_soil_vwc2 <- plant_id_data_OF2 |> 
   filter(!is.na(habitat)) |>
   ggplot(aes(y = mean_stomatal_density, x = VWC.soil_0_15_cm.mean, color = species)) +
   geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
@@ -1510,7 +1666,27 @@ f_grid_plant_soil_vwc2 <- plant_id_data_OF |>
 # Afficher le graphique
 print(f_grid_plant_soil_vwc2)
 
-f_grid_plant_soil_T2 <- plant_id_data_OF |> 
+f_grid_plant_soil_vwc12 <- plant_id_data_OF12 |> 
+  filter(!is.na(habitat)) |>
+  ggplot(aes(y = mean_stomatal_density, x = VWC.soil_0_15_cm.mean, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+#  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal Density (stomata / mm²)", x = "Volumetric water content")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
+# Afficher le graphique
+print(f_grid_plant_soil_vwc12)
+
+f_grid_plant_soil_T2 <- plant_id_data_OF2 |> 
   filter(!is.na(habitat)) |>
   ggplot(aes(y = mean_stomatal_density, x = T.soil_8_cm.mean, color = species)) +
   geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
@@ -1530,7 +1706,27 @@ f_grid_plant_soil_T2 <- plant_id_data_OF |>
 # Afficher le graphique
 print(f_grid_plant_soil_T2)
 
-f_grid_plant_soil_Frost2 <- plant_id_data_OF |> 
+f_grid_plant_soil_T12 <- plant_id_data_OF12 |> 
+  filter(!is.na(habitat)) |>
+  ggplot(aes(y = mean_stomatal_density, x = T.soil_8_cm.mean, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+#  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal Density (stomata / mm²)", x = "Soil Temperature (°C)")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
+# Afficher le graphique
+print(f_grid_plant_soil_T12)
+
+f_grid_plant_soil_Frost2 <- plant_id_data_OF2 |> 
   filter(!is.na(habitat)) |>
   ggplot(aes(y = mean_stomatal_density, x = T.soil_8_cm.frostdays, color = species)) +
   geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
@@ -1550,7 +1746,7 @@ f_grid_plant_soil_Frost2 <- plant_id_data_OF |>
 # Afficher le graphique
 print(f_grid_plant_soil_Frost2)
 
-f_grid_plant_air_T2cm2 <- plant_id_data_OF |> 
+f_grid_plant_air_T2cm2 <- plant_id_data_OF2 |> 
   filter(!is.na(habitat)) |>
   ggplot(aes(y = mean_stomatal_density, x = T.air_2_cm.mean, color = species)) +
   geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
@@ -1570,7 +1766,27 @@ f_grid_plant_air_T2cm2 <- plant_id_data_OF |>
 # Afficher le graphique
 print(f_grid_plant_air_T2cm2)
 
-f_grid_plant_air_FD2cm2 <- plant_id_data_OF |> 
+f_grid_plant_air_T2cm12 <- plant_id_data_OF12 |> 
+  filter(!is.na(habitat)) |>
+  ggplot(aes(y = mean_stomatal_density, x = T.air_2_cm.mean, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+#  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal Density (stomata / mm²)", x = "2cm Air Temperature (°C)")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
+# Afficher le graphique
+print(f_grid_plant_air_T2cm12)
+
+f_grid_plant_air_FD2cm2 <- plant_id_data_OF2 |> 
   filter(!is.na(habitat)) |>
   ggplot(aes(y = mean_stomatal_density, x = T.air_2_cm.frostdays, color = species)) +
   geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
@@ -1589,6 +1805,26 @@ f_grid_plant_air_FD2cm2 <- plant_id_data_OF |>
 
 # Afficher le graphique
 print(f_grid_plant_air_FD2cm2)
+
+f_grid_plant_air_FD2cm12 <- plant_id_data_OF12 |> 
+  filter(!is.na(habitat)) |>
+  ggplot(aes(y = mean_stomatal_density, x = T.air_2_cm.frostdays, color = species)) +
+  geom_point(aes(shape = siteID), size = 3) + # Ajoute des points avec des formes différentes pour chaque espèce
+  geom_smooth(aes(color = species), method = "lm") + # Ajoute des lignes de régression séparées pour chaque espèce
+#  facet_grid(. ~ species) + # Crée des facettes pour chaque site
+  labs(y = "Stomatal Density (stomata / mm²)", x = "Number of frostdays")+ 
+  theme(
+    axis.title.x = element_text(size = 14), 
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12), 
+    axis.text.y = element_text(size = 12), 
+    plot.subtitle = element_text(size = 14),
+    plot.caption = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  ) 
+
+# Afficher le graphique
+print(f_grid_plant_air_FD2cm12)
 
 f_grid_plant_air_T15cm2 <- plant_id_data_OF |> 
   filter(!is.na(habitat)) |>
@@ -1610,27 +1846,27 @@ f_grid_plant_air_T15cm2 <- plant_id_data_OF |>
 print(f_grid_plant_air_T15cm2)
 
 
-#soil_join <- ggarrange(
-#  f_grid_plant_soil_vwc2, f_grid_plant_soil_vwc12, f_grid_plant_soil_T2, f_grid_plant_soil_T12,
-#  labels = c("a)", "b)", "c)", "d)"),
-#  ncol = 2,
-#  nrow = 2,
-#  common.legend = TRUE,
-#  font.label = list(size = 17, face = "bold")
-#) 
+soil_join <- ggarrange(
+  f_grid_plant_soil_vwc2, f_grid_plant_soil_vwc12, f_grid_plant_soil_T2, f_grid_plant_soil_T12,
+  labels = c("a)", "b)", "c)", "d)"),
+  ncol = 2,
+  nrow = 2,
+  common.legend = TRUE,
+  font.label = list(size = 17, face = "bold")
+) 
 
-#soil_join
+soil_join
 
-#air_join <- ggarrange(
-#  f_grid_plant_air_T2cm2, f_grid_plant_air_T2cm12, f_grid_plant_air_FD2cm2, f_grid_plant_air_FD2cm12,
-#  labels = c("a)", "b)", "c)", "d)"),
-#  ncol = 2,
-#  nrow = 2,
-#  common.legend = TRUE,
-#  font.label = list(size = 17, face = "bold")
-#) 
+air_join <- ggarrange(
+  f_grid_plant_air_T2cm2, f_grid_plant_air_T2cm12, f_grid_plant_air_FD2cm2, f_grid_plant_air_FD2cm12,
+  labels = c("a)", "b)", "c)", "d)"),
+  ncol = 2,
+  nrow = 2,
+  common.legend = TRUE,
+  font.label = list(size = 17, face = "bold")
+) 
 
-#air_join
+air_join
 
 #coefficient of linear regression
 plant_id_data_OF_VM <- plant_id_data_OF |> 
@@ -1697,8 +1933,8 @@ ggsave(filename = paste0(fig_save, "/Sd_Ta2cm2.png"), plot = f_grid_plant_air_T2
 ggsave(filename = paste0(fig_save, "/Sd_TaFd2cm2.png"), plot = f_grid_plant_air_FD2cm2, width = 10, height = 6, units = "in", dpi = 300)
 ggsave(filename = paste0(fig_save, "/Sd_Ta15cm2.png"), plot = f_grid_plant_air_T15cm2, width = 10, height = 6, units = "in", dpi = 300)
 
-#ggsave(filename = paste0(fig_save, "/soil_comp.png"), plot = soil_join, width = 10, height = 12, units = "in", dpi = 300)
-#ggsave(filename = paste0(fig_save, "/air_comp.png"), plot = air_join, width = 10, height = 12, units = "in", dpi = 300)
+ggsave(filename = paste0(fig_save, "/soil_comp.png"), plot = soil_join, width = 10, height = 12, units = "in", dpi = 300)
+ggsave(filename = paste0(fig_save, "/air_comp.png"), plot = air_join, width = 10, height = 12, units = "in", dpi = 300)
 ```
 
 sa
@@ -2052,7 +2288,7 @@ SP_data_picture_OF$plant_id <- as.factor(SP_data_picture_OF$plant_id)
   data_species$inv_mean_stomatal_area_um2_p <- 1/(data_species$mean_stomatal_area_um2_p)
 
 
-  # ANOVA with interactions
+  # lmer with interactions
   model1 <- lmer(sqrt_stomatal_density_p ~ habitat * siteID * species+
                 (1 | siteID/plant_id/leaf_id) +
                 (1 | plant_id), data = data_species)
